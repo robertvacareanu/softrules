@@ -91,8 +91,8 @@ def train_model(model, **kwargs):
             sent_a = random.choice(training_data)
         sent_b = random.choice(training_data)
 
-        sent_a_tokens = preprocess_line(sent_a)
-        sent_b_tokens = preprocess_line(sent_b)
+        sent_a_tokens = preprocess_line(sent_a, preprocessing_type=kwargs['marker_type'])
+        sent_b_tokens = preprocess_line(sent_b, preprocessing_type=kwargs['marker_type'])
 
         data.append(InputExample(texts=[sent_a_tokens, sent_b_tokens], label=1 if sent_a['relation'] == sent_b['relation'] else 0))
 
@@ -105,7 +105,7 @@ def train_model(model, **kwargs):
     return model
 
 
-def compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds, verbose):
+def compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds, verbose, return_prf1: bool = False):
     """
     Compute the results for each threshold and returns the results
     """
@@ -117,7 +117,11 @@ def compute_results_with_thresholds(gold, pred_scores, pred_relations, threshold
                 pred.append(pr[np.argmax(ps)])
             else:
                 pred.append('no_relation')
-        results.append((threshold, tacred_score(gold, pred, verbose=verbose)[-1] * 100))
+        if return_prf1:
+            scores = tacred_score(gold, pred, verbose=verbose)
+            results.append((threshold, [s * 100 for s in scores]))
+        else:
+            results.append((threshold, tacred_score(gold, pred, verbose=verbose)[-1] * 100))
 
     return results
 
@@ -132,8 +136,8 @@ def main(args):
     """
     model = CrossEncoder(args['model_name'], max_length=512)
     
-    if args['train']:
-        model = train_model(model, training_path=args['training_path'], finetuning_examples=args['finetuning_examples'])
+    if args['do_train']:
+        model = train_model(model, training_path=args['training_path'], finetuning_examples=args['finetuning_examples'], marker_type=args['marker_type'])
     
     if args['threshold']: # If threshold is passed, use it
         threshold = [args['threshold']]
@@ -143,7 +147,7 @@ def main(args):
                 all_episodes = json.load(fin)
             
             # Compute predictions
-            gold, pred_scores, pred_relations = predict_with_model(model, all_episodes)
+            gold, pred_scores, pred_relations = predict_with_model(model, all_episodes, marker_type=args['marker_type'])
             # Select best threshold 
             best_threshold_results = compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds=np.linspace(0, 1, 101).tolist(), verbose=False)
             threshold = max(best_threshold_results, key=lambda x: x[1])[0]
@@ -157,13 +161,13 @@ def main(args):
         with open(evaluation_path) as fin:
             test_episodes = json.load(fin)
 
-        gold, pred_scores, pred_relations = predict_with_model(model, test_episodes)
+        gold, pred_scores, pred_relations = predict_with_model(model, test_episodes, marker_type=args['marker_type'])
         print("###############")
         print('Evaluation Path: ', evaluation_path)
         # [0] -> Results for only one thresholds; 
         # [1] -> Get the result portion (it is a Tuple with (1) -> Threshold and (2) -> Reults)
-        scores = compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds=[threshold], verboes=True)[0][1] 
-        results.append({'evaluation_path': evaluation_path, 'precision': scores[0] * 100, 'recall': scores[1] * 100, 'f1': scores[2] * 100})
+        scores = compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds=[threshold], verbose=True, return_prf1=True)[0][1]
+        results.append({'evaluation_path': evaluation_path, 'precision': scores[0], 'recall': scores[1], 'f1': scores[2]})
         print(scores)
         print("###############")
 
