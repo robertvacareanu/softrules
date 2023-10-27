@@ -21,6 +21,7 @@ from sentence_transformers import CrossEncoder
 from scipy.special import expit
 from src.baseline.entity_marker_cross_encoder import preprocess_line
 from src.utils import tacred_score
+from sklearn.metrics import f1_score
 
 def predict_with_model(model, all_episodes: Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]], **kwargs):
     gold           = []
@@ -105,7 +106,7 @@ def train_model(model, **kwargs):
     return model
 
 
-def compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds, verbose, return_prf1: bool = False):
+def compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds, verbose):
     """
     Compute the results for each threshold and returns the results
     """
@@ -117,12 +118,17 @@ def compute_results_with_thresholds(gold, pred_scores, pred_relations, threshold
                 pred.append(pr[np.argmax(ps)])
             else:
                 pred.append('no_relation')
-        if return_prf1:
-            scores = tacred_score(gold, pred, verbose=verbose)
-            results.append((threshold, [s * 100 for s in scores]))
-        else:
-            results.append((threshold, tacred_score(gold, pred, verbose=verbose)[-1] * 100))
+        scores = [s * 100 for s in tacred_score(gold, pred, verbose=verbose)] # Make the scores be 0-100
 
+        results.append({
+            'threshold'            : threshold,
+            'p_tacred'             : scores[0],
+            'r_tacred'             : scores[1],
+            'f1_tacred'            : scores[2],
+            'f1_macro'             : f1_score(gold, pred, average='macro'),
+            'f1_micro'             : f1_score(gold, pred, average='micro'),
+            'f1_micro_withoutnorel': f1_score(gold, pred, average='macro', labels=sorted(list(set(gold).difference(["no_relation"])))),
+        })
     return results
 
 def main(args):
@@ -150,8 +156,8 @@ def main(args):
             gold, pred_scores, pred_relations = predict_with_model(model, all_episodes, marker_type=args['marker_type'])
             # Select best threshold 
             best_threshold_results = compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds=np.linspace(0, 1, 101).tolist(), verbose=False)
-            threshold = max(best_threshold_results, key=lambda x: x[1])[0]
-            print("Best threshold: ", max(best_threshold_results, key=lambda x: x[1])[0], "with score: ", max(best_threshold_results, key=lambda x: x[1])[1])
+            threshold = max(best_threshold_results, key=lambda x: x['f1_tacred'])['threshold']
+            print("Best threshold: ", max(best_threshold_results, key=lambda x: x['f1_tacred'])['threshold'], "with score: ", max(best_threshold_results, key=lambda x: x['f1_tacred'])['f1_tacred'])
             print(best_threshold_results)
         else:
             raise ValueError("No threshold nor file to find it is passed. Is everything ok?")
@@ -166,16 +172,19 @@ def main(args):
         print('Evaluation Path: ', evaluation_path)
         # [0] -> Results for only one thresholds; 
         # [1] -> Get the result portion (it is a Tuple with (1) -> Threshold and (2) -> Reults)
-        scores = compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds=[threshold], verbose=True, return_prf1=True)[0][1]
-        results.append({'evaluation_path': evaluation_path, 'precision': scores[0], 'recall': scores[1], 'f1': scores[2]})
+        scores = compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds=[threshold], verbose=True, return_prf1=True)[0]
+        results.append({'evaluation_path': evaluation_path, **scores})
         print(scores)
         print("###############")
 
     print("Final results")
     df = pd.DataFrame(results)
-    print("P:  ", str(df['precision'].mean()) + " +- " + str(df['precision'].std()))
-    print("R:  ", str(df['recall'].mean())    + " +- " + str(df['recall'].std()))
-    print("F1: ", str(df['f1'].mean())        + " +- " + str(df['f1'].std()))
+    print("P:  ", str(df['p_tacred'].mean())                                 + " +- " + str(df['p_tacred'].std()))
+    print("R:  ", str(df['r_tacred'].mean())                                 + " +- " + str(df['r_tacred'].std()))
+    print("F1: ", str(df['f1_tacred'].mean())                                + " +- " + str(df['f1_tacred'].std()))
+    print("F1: (macro) ", str(df['f1_macro'].mean())                         + " +- " + str(df['f1_macro'].std()))
+    print("F1: (micro) ", str(df['f1_micro'].mean())                         + " +- " + str(df['f1_micro'].std()))
+    print("F1: (micro) (wo norel) ", str(df['f1_micro_withoutnorel'].mean()) + " +- " + str(df['f1_micro_withoutnorel'].std()))
 
     if args['append_results_to_file']:
         with open(args['append_results_to_file'], 'a+') as fout:
