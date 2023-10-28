@@ -49,7 +49,7 @@ def preprocess_line(line, preprocessing_type: MarkerTypes):
         obj_end_marker    = lambda x: '#'
         return entity_marker(line, subj_start_marker, subj_end_marker, obj_start_marker, obj_end_marker)
     elif preprocessing_type == "typed_entity_marker": # `John Doe was born in New York City` -> `[SUBJ-PESON] John Doe [/SUBJ-PERSON] was born in [OBJ-LOC] New York City [/OBJ-LOC]`
-        subj_start_marker = lambda x: f'[S-{x.upper()}]'
+        subj_start_marker = lambda x: f'[SUBJ-{x.upper()}]'
         subj_end_marker   = lambda x: f'[/SUBJ-{x.upper()}]'
         obj_start_marker  = lambda x: f'[OBJ-{x.upper()}]'
         obj_end_marker    = lambda x: f'[/OBJ-{x.upper()}]'
