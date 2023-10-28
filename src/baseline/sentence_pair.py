@@ -149,6 +149,7 @@ def main(args):
         threshold = [args['threshold']]
     else: # If not, then we have to find it on `find_threshold_on_path`
         if args['find_threshold_on_path']:
+            print("Finding the best threshold")
             with open(args['find_threshold_on_path']) as fin:
                 all_episodes = json.load(fin)
             
@@ -172,7 +173,7 @@ def main(args):
         print('Evaluation Path: ', evaluation_path)
         # [0] -> Results for only one thresholds; 
         # [1] -> Get the result portion (it is a Tuple with (1) -> Threshold and (2) -> Reults)
-        scores = compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds=[threshold], verbose=True)[0]
+        scores = compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds=[threshold], verbose=True, return_prf1=True)[0]
         results.append({'evaluation_path': evaluation_path, **scores})
         print(scores)
         print("###############")
