@@ -125,9 +125,9 @@ def compute_results_with_thresholds(gold, pred_scores, pred_relations, threshold
             'p_tacred'             : scores[0],
             'r_tacred'             : scores[1],
             'f1_tacred'            : scores[2],
-            'f1_macro'             : f1_score(gold, pred, average='macro'),
-            'f1_micro'             : f1_score(gold, pred, average='micro'),
-            'f1_micro_withoutnorel': f1_score(gold, pred, average='macro', labels=sorted(list(set(gold).difference(["no_relation"])))),
+            'f1_macro'             : f1_score(gold, pred, average='macro') * 100,
+            'f1_micro'             : f1_score(gold, pred, average='micro') * 100,
+            'f1_micro_withoutnorel': f1_score(gold, pred, average='macro', labels=sorted(list(set(gold).difference(["no_relation"])))) * 100,
         })
     return results
 
@@ -149,7 +149,6 @@ def main(args):
         threshold = [args['threshold']]
     else: # If not, then we have to find it on `find_threshold_on_path`
         if args['find_threshold_on_path']:
-            print("Finding the best threshold")
             with open(args['find_threshold_on_path']) as fin:
                 all_episodes = json.load(fin)
             
