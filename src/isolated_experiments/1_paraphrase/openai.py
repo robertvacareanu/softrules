@@ -53,7 +53,7 @@ if __name__ == "__main__":
                 all_sentences.append({**example, 'relation': relation})
 
     work_data = []
-    for line in all_sentences[:100]:
+    for line in all_sentences:
         entity1 = ' '.join(line['token'][line['subj_start']:(line['subj_end']+1)])
         entity2 = ' '.join(line['token'][line['obj_start']:(line['obj_end']+1)])
         text    = ' '.join(line['token'])
@@ -65,8 +65,13 @@ if __name__ == "__main__":
         }
         work_data.append(template.substitute(**template_data))
 
+    print(len(work_data))
+    # exit()
+    
     with multiprocessing.Pool(100) as p:
         result = list(tqdm.tqdm(p.imap(work_fn, work_data), total=len(work_data)))
+    # result = [work_fn(x) for x in tqdm.tqdm(work_data)]
+    
 
     print(result[0])
     print(result[1])
