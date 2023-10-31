@@ -10,7 +10,9 @@ import multiprocessing
 
 import sys
 import scipy as sp
-from typing import Dict, List
+from typing import Dict, List, Any
+
+import hashlib
 
 NO_RELATION = "no_relation"
 
@@ -93,3 +95,22 @@ def tacred_score(key, prediction, verbose=False):
         print( "       F1 (micro): {:.2%}".format(f1_micro) )
     return prec_micro, recall_micro, f1_micro
 
+
+def line_to_hash(line: Dict[str, Any], use_all_fields: bool = False):
+    if use_all_fields:
+        name_variables = [
+            str(' '.join(line['token'])),
+            str(line['subj_start']),
+            str(line['subj_end']),
+            str(line['obj_start']),
+            str(line['obj_end']),
+            str(line['subj_type']),
+            str(line['obj_type']),
+            str(line['relation']),
+        ]
+    else:
+        name_variables = [
+            str(' '.join(line['token'])),
+        ]
+
+    return hashlib.md5('-'.join(name_variables).encode('utf-8')).hexdigest().lower()
