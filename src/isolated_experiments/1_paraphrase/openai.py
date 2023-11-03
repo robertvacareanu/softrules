@@ -1,5 +1,9 @@
 """
 Use one of the Open AI models to generate paraphrasings
+
+python -m src.isolated_experiments.1_paraphrase.openai --dataset_path ../Few-Shot_Datasets/TACRED/few_shot_data/_train_data.json --save_path results/231027/paraphrashing/openai/TACRED/output.pickle --number_of_paraphrases 5
+
+python -m src.isolated_experiments.1_paraphrase.openai --dataset_path ../Few-Shot_Datasets/WIKIDATA/few_shot_data/_dev_data.json --save_path results/231027/paraphrashing/openai/NYT29/output.pickle --number_of_paraphrases 5
 """
 
 import argparse
