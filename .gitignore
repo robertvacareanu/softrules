@@ -161,3 +161,4 @@ cython_debug/
 .history/
 logs/
 results/
+lightning_logs/
