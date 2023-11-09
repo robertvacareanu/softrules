@@ -13,6 +13,7 @@ import scipy as sp
 from typing import Dict, List, Any
 
 import hashlib
+import json
 
 NO_RELATION = "no_relation"
 
@@ -114,3 +115,36 @@ def line_to_hash(line: Dict[str, Any], use_all_fields: bool = False):
         ]
 
     return hashlib.md5('-'.join(name_variables).encode('utf-8')).hexdigest().lower()
+
+def read_rules(path: str):
+    result = defaultdict(list)
+    with open(path) as fin:
+        for line in fin:
+            result.append(json.loads(line))
+
+    return result
+
+def compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds, verbose):
+    """
+    Compute the results for each threshold and returns the results
+    """
+    results = []
+    for threshold in thresholds:
+        pred = []
+        for ps, pr in zip(pred_scores, pred_relations):
+            if np.max(ps) > threshold:
+                pred.append(pr[np.argmax(ps)])
+            else:
+                pred.append('no_relation')
+        scores = [s * 100 for s in tacred_score(gold, pred, verbose=verbose)] # Make the scores be 0-100
+
+        results.append({
+            'threshold'            : threshold,
+            'p_tacred'             : scores[0],
+            'r_tacred'             : scores[1],
+            'f1_tacred'            : scores[2],
+            'f1_macro'             : f1_score(gold, pred, average='macro') * 100,
+            'f1_micro'             : f1_score(gold, pred, average='micro') * 100,
+            'f1_micro_withoutnorel': f1_score(gold, pred, average='macro', labels=sorted(list(set(gold).difference(["no_relation"])))) * 100,
+        })
+    return results
