@@ -2,6 +2,17 @@ from typing import Dict
 import json
 from src.baseline.entity_marker_cross_encoder import preprocess_line
 from src.utils import line_to_hash
+from collections import defaultdict
+
+
+def read_rules(path: str):
+    result = defaultdict(list)
+    with open(path) as fin:
+        for line in fin:
+            line = json.loads(line)
+            result[line['line_to_hash']].append(line)
+            
+    return dict(result)
 
 def read_fsre_data(path: str, rules: Dict[str, dict], preprocessing_type: str, **kwargs):
     """

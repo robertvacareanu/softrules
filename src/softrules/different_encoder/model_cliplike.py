@@ -56,6 +56,12 @@ import itertools
 
 import torch.optim as optim
 
+from transformers import get_linear_schedule_with_warmup
+
+from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, LearningRateMonitor
+
+
 class SoftRulesEncoder(pl.LightningModule):
     """
     Encode the concatenation of rules and the sentences with the same encoder
@@ -120,6 +126,8 @@ class SoftRulesEncoder(pl.LightningModule):
 
 
         self.logit_scale = nn.Parameter(torch.tensor(np.log(1/0.07)))
+
+        self.save_hyperparameters(self.hyperparameters)
 
     def predict(self, batch):
 
@@ -367,9 +375,10 @@ class SoftRulesEncoder(pl.LightningModule):
         results = compute_results_with_thresholds(gold=gold, pred_scores=pred_scores, pred_relations=relations, thresholds=self.thresholds, verbose=False)
         best = max(results, key=lambda x: x['f1_tacred'])
 
-        self.log('val/p_tacred',  best['p_tacred'])
-        self.log('val/r_tacred',  best['r_tacred'])
-        self.log('val/f1_tacred', best['f1_tacred'])
+        self.log('threshold', best['threshold'])
+        self.log('p_tacred',  best['p_tacred'])
+        self.log('r_tacred',  best['r_tacred'])
+        self.log('f1_tacred', best['f1_tacred'])
         
         print(best)
 
@@ -390,16 +399,18 @@ class SoftRulesEncoder(pl.LightningModule):
             {"params": self.logit_scale, "lr": self.hyperparameters['logit_scale_lr']},
         ]
         optimizer = optim.Adam(parameters, weight_decay=self.hyperparameters['weight_decay'])
-        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer,
-            mode="max",
-            patience=self.hyperparameters['lr_scheduler_patience'],
-            factor=self.hyperparameters['lr_scheduler_factor'],
-        )
+        print("Esitmated steps:", self.trainer.estimated_stepping_batches)
+        total_steps = self.trainer.estimated_stepping_batches
+        lr_scheduler = get_linear_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=total_steps * 0.1, num_training_steps=total_steps)
+        # optim.lr_scheduler.LinearLR(
+        #     optimizer,
+        #     mode="max",
+        #     patience=self.hyperparameters['lr_scheduler_patience'],
+        #     factor=self.hyperparameters['lr_scheduler_factor'],
+        # )
         return {
             "optimizer": optimizer,
-            "lr_scheduler": lr_scheduler,
-            "monitor": "val/f1_tacred",
+            # "lr_scheduler": lr_scheduler,
         }
 
     def on_before_zero_grad(self, *args, **kwargs):
@@ -408,7 +419,9 @@ class SoftRulesEncoder(pl.LightningModule):
         # https://github.com/KeremTurgutlu/self_supervised/blob/2e7a7dc418891edccbf01efc0ab03d5e48586c8d/self_supervised/multimodal/clip.py#L346
         # https://lightning.ai/forums/t/where-to-clamp-weights/433
         # See https://github.com/openai/CLIP/issues/48 for why to clip and why to use logit scale
+        # print("Yeaah Buddyyyy", self.logit_scale.data)
         self.logit_scale.data = torch.clamp(self.logit_scale.data, 0, 4.6052)
+        # print("Yeaah Buddyyyy", self.logit_scale.data)
 
 
     def tokenize(self, examples, max_length=384, padding=False):
@@ -478,7 +491,23 @@ def read_rules(path: str):
         for line in fin:
             line = json.loads(line)
             result[line['line_to_hash']].append(line)
-    return result
+    return dict(result)
+
+def read_valdata(dev_path: str, preprocessing_type: str, rules: Dict[str, dict]):
+    with open(dev_path) as fin:
+        val_data = json.load(fin)
+    val = []
+    idx = -1
+    for episode, selections, relations in zip(val_data[0], val_data[1], val_data[2]):
+        for ts in episode['meta_test']:
+            idx += 1
+            episode_ss = [y for x in episode['meta_train'] for y in x]
+            episode_ss_rules = [y for s in episode_ss for y in rules[line_to_hash(s, use_all_fields=True)]]
+            relations = [s['relation'] for s in episode_ss for y in rules[line_to_hash(s, use_all_fields=True)]]
+            for rule, ss_relation in zip(episode_ss_rules, relations):
+                val.append({'id': idx, 'rule': rule['query'].lower(), 'sentence': preprocess_line(ts, preprocessing_type), 'ss_relation': ss_relation, 'ts_relation': ts['relation'] if ts['relation'] in relations else 'no_relation'})
+    print(len(val))
+    return val
 
 def get_argparser():
     parser = argparse.ArgumentParser()
@@ -498,6 +527,7 @@ def get_argparser():
     parser.add_argument("--logit_scale_lr",                    type=float, default=1e-5)
 
     parser.add_argument("--max_epochs",                        type=int,   default=3)
+    parser.add_argument("--max_steps",                         type=int,   default=10000)
     parser.add_argument("--val_check_interval",                type=float, default=0.5)
     parser.add_argument("--accumulate_grad_batches",           type=int,   default=1)
     parser.add_argument("--train_batch_size",                  type=int,   default=64)
@@ -539,17 +569,46 @@ if __name__ == "__main__":
     
     data = []
     idx = -1
-    for (relation, sentences) in train_data.items():
-        for sentence in sentences:
-            for rule in rules[line_to_hash(sentence, use_all_fields=True)]:
-                idx += 1
-                data.append({
-                    'id': idx,
-                    'rule': rule['query'].lower(),
-                    'sentence': preprocess_line(sentence, args['preprocessing_type']),
-                })
-    
-    data = datasets.Dataset.from_list(data)
+    # for (relation, sentences) in train_data.items():
+    #     for sentence in sentences:
+    #         for rule in rules[line_to_hash(sentence, use_all_fields=True)]:
+    #             idx += 1
+    #             data.append({
+    #                 'id': idx,
+    #                 'rule': rule['query'].lower(),
+    #                 'sentence': preprocess_line(sentence, args['preprocessing_type']),
+    #             })
+
+    with open('/home/rvacareanu/projects_5_2210/rule_generation/random/enhanced_syntax_1.jsonl') as fin:
+        for line in fin:
+            idx += 1
+            loaded_line = json.loads(line)
+            preprocessed_line = preprocess_line(loaded_line, args['preprocessing_type'])
+            if len(preprocessed_line.split()) > 96:
+                continue
+            if len(loaded_line['query'].lower().split()) > 11:
+                continue
+            data.append({
+                'id': idx,
+                'rule': loaded_line['query'].lower(),
+                'sentence': preprocess_line(loaded_line, args['preprocessing_type']),
+            })
+    with open('/home/rvacareanu/projects_5_2210/rule_generation/random/surface_1.jsonl') as fin:
+        for line in fin:
+            idx += 1
+            loaded_line = json.loads(line)
+            preprocessed_line = preprocess_line(loaded_line, args['preprocessing_type'])
+            if len(preprocessed_line.split()) > 96:
+                continue
+            if len(loaded_line['query'].lower().split()) > 11:
+                continue
+            data.append({
+                'id': idx,
+                'rule': loaded_line['query'].lower(),
+                'sentence': preprocess_line(loaded_line, args['preprocessing_type']),
+            })
+
+    data = datasets.Dataset.from_list(data).select(range(250_000))
     print(data)
     print(data[0])
     data_tok = data\
@@ -557,37 +616,22 @@ if __name__ == "__main__":
         .filter(lambda x: sum(x['attention_mask_rule']) < 96 and sum(x['attention_mask_sentence']) < 96)
     print(data_tok)
 
-    with open(args['dev_path']) as fin:
-        val_data = json.load(fin)
-
-    val = []
-    idx = -1
-    for episode, selections, relations in zip(val_data[0], val_data[1], val_data[2]):
-        for ts in episode['meta_test']:
-            idx += 1
-            episode_ss = [y for x in episode['meta_train'] for y in x]
-            episode_ss_rules = [y for s in episode_ss for y in rules[line_to_hash(s, use_all_fields=True)]]
-            relations = [s['relation'] for s in episode_ss for y in rules[line_to_hash(s, use_all_fields=True)]]
-            for rule, ss_relation in zip(episode_ss_rules, relations):
-                val.append({'id': idx, 'rule': rule['query'].lower(), 'sentence': preprocess_line(ts, args['preprocessing_type']), 'ss_relation': ss_relation, 'ts_relation': ts['relation'] if ts['relation'] in relations else 'no_relation'})
-    print(len(val_data))
     keep_columns = ['id', 'ss_relation', 'ts_relation']
-    val_data = datasets.Dataset.from_list(val)
+    val_data = datasets.Dataset.from_list(read_valdata(args['dev_path'], args['preprocessing_type'], rules=rules))
     val_data_tok = val_data.map(lambda x: model.tokenize(x, padding=False, max_length=384), batched=True, cache_file_name=None, load_from_cache_file=False, remove_columns=[x for x in val_data.column_names if x not in keep_columns])
 
 
-    from pytorch_lightning import Trainer
-    from pytorch_lightning.callbacks.lr_monitor import LearningRateMonitor
-    from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 
-    model_checkpoint = ModelCheckpoint()
+    # model_checkpoint = ModelCheckpoint(filename='{epoch}-{val_loss:.2f}-p={p_tacred:.2f}-r={r_tacred:.2f}-f1={f1_tacred:.2f}-thr={threshold:.3f}', monitor='f1_tacred', mode='max')
+    model_checkpoint = ModelCheckpoint(every_n_train_steps=1000)
     lr_monitor = LearningRateMonitor(logging_interval='step')
+    es = EarlyStopping(monitor="f1_tacred", mode="max", patience=3)
 
     trainer = Trainer(
         accelerator="gpu", 
-        # max_steps=5000,
+        max_steps=args['max_steps'],
         # val_check_interval=2500,
-        max_epochs=args['max_epochs'],
+        # max_epochs=args['max_epochs'],
         val_check_interval=args['val_check_interval'],
         # check_val_every_n_epoch=1,
         gradient_clip_val=1.0,
