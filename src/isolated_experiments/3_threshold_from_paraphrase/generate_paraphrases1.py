@@ -27,7 +27,7 @@ $TEXT
 1. """
 )
 """
-This tempalte generates different text, but keeps the entities
+This template generates different text, but keeps the entities
 """
 
 llm = ChatOpenAI(temperature=0)
@@ -41,7 +41,7 @@ def work_fn(example):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser("Sentence-Pair Baseline")
+    parser = argparse.ArgumentParser("Paraphrases1")
     parser.add_argument('--dataset_path', type=str, required=True, help="The dataset to generate paraphrasings on.")
     parser.add_argument('--save_path', type=str, required=True, help="Where to save the resulting dataset")
     parser.add_argument('--number_of_paraphrases', type=int, required=False, default=5, help="How many paraphrases to generate.")
