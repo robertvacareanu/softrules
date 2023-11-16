@@ -1,7 +1,6 @@
 """
 Use one of the Open AI models to generate paraphrasings
 
-python -m src.isolated_experiments.1_paraphrase.openai --dataset_path ../Few-Shot_Datasets/TACRED/few_shot_data/_train_data.json --save_path results/231027/paraphrashing/openai/TACRED/output.pickle
 
 """
 
@@ -42,6 +41,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Paraphrases1")
     parser.add_argument('--dataset_path', type=str, required=True, help="The dataset to generate paraphrasings on.")
     parser.add_argument('--save_path', type=str, required=True, help="Where to save the resulting dataset")
+    parser.add_argument('--subset_start', type=int, default=0, required=False, help="Limit on how many to do (simple attempt to make sure we do not run an overwhelmingly expensive number of queries to OpenAI)")
+    parser.add_argument('--subset_end', type=int, default=100000, required=False, help="Limit on how many to do (simple attempt to make sure we do not run an overwhelmingly expensive number of queries to OpenAI)")
 
     args = vars(parser.parse_args())
 
@@ -69,10 +70,11 @@ if __name__ == "__main__":
         work_data.append(template1.substitute(**template_data))
     
 
+    work_data = work_data[args['subset_start']:args['subset_end']]
     print(len(work_data))
-    # exit()
+    print(work_data[0])
 
-    with multiprocessing.Pool(50) as p:
+    with multiprocessing.Pool(500) as p:
         result = list(tqdm.tqdm(p.imap(work_fn, work_data), total=len(work_data)))
     # result = [work_fn(x) for x in tqdm.tqdm(work_data)]
     
