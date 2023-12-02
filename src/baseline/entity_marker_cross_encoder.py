@@ -24,7 +24,7 @@ from typing import Callable, Literal
 
 MarkerTypes = Literal["entity_mask", "entity_marker", "entity_marker_punct", "typed_entity_marker", "typed_entity_marker_punct"]
 
-def preprocess_line(line, preprocessing_type: MarkerTypes):
+def preprocess_line(original_line, preprocessing_type: MarkerTypes) -> str:
     """
     Preprocess a line and return the processed tokens
     Can handle multiple types of masking:
@@ -34,6 +34,14 @@ def preprocess_line(line, preprocessing_type: MarkerTypes):
         - typed_entity_marker
         - typed_entity_marker_punct
     """
+    line = {**original_line}
+    if line['subj_type'].lower().startswith('b-') or line['subj_type'].lower().startswith('i-'):
+        # print(f"Yess: {line['subj_type']}")
+        line['subj_type'] = line['subj_type'][2:]
+    if line['obj_type'].lower().startswith('b-') or line['obj_type'].lower().startswith('i-'):
+        # print(f"Yesss: {line['obj_type']}")
+        line['obj_type'] = line['obj_type'][2:]
+        
     if preprocessing_type == 'entity_mask': # `John Doe was born in New York City` -> `[SUBJ-PER] was born in [OBJ-LOC]`
         return entity_mask(line)
     elif preprocessing_type == 'entity_marker': # `John Doe was born in New York City` -> `[SUBJ] John Doe [/SUBJ] was born in [OBJ] New York City [/OBJ]`
