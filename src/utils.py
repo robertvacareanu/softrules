@@ -10,7 +10,7 @@ import multiprocessing
 
 import sys
 import scipy as sp
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Union
 
 import hashlib
 import json
@@ -124,18 +124,37 @@ def read_rules(path: str):
 
     return result
 
-def compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds, verbose):
+def compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds, verbose, overwrite_results: Union[Dict, str] = {}):
     """
     Compute the results for each threshold and returns the results
     """
+
+    if overwrite_results is None:
+        defaults = {}
+    else:
+        if isinstance(overwrite_results, dict):
+            defaults = overwrite_results
+        elif isinstance(overwrite_results, str):
+            with open(overwrite_results) as fin:
+                defaults = json.load(fin)
+        else:
+            defaults = {}            
+
+    # Map to integer ids (instead of string)
+    defaults = {int(k):v for (k, v) in defaults.items()}
+    print("Default preds: ", defaults)
+
     results = []
     for threshold in thresholds:
         pred = []
-        for ps, pr in zip(pred_scores, pred_relations):
-            if np.max(ps) > threshold:
-                pred.append(pr[np.argmax(ps)])
+        for ep_id, (ps, pr) in enumerate(zip(pred_scores, pred_relations)):
+            if ep_id in defaults:
+                pred.append(defaults[ep_id])
             else:
-                pred.append('no_relation')
+                if np.max(ps) > threshold:
+                    pred.append(pr[np.argmax(ps)])
+                else:
+                    pred.append('no_relation')
         scores = [s * 100 for s in tacred_score(gold, pred, verbose=verbose)] # Make the scores be 0-100
 
         results.append({
@@ -143,8 +162,42 @@ def compute_results_with_thresholds(gold, pred_scores, pred_relations, threshold
             'p_tacred'             : scores[0],
             'r_tacred'             : scores[1],
             'f1_tacred'            : scores[2],
-            'f1_macro'             : f1_score(gold, pred, average='macro') * 100,
             'f1_micro'             : f1_score(gold, pred, average='micro') * 100,
-            'f1_micro_withoutnorel': f1_score(gold, pred, average='macro', labels=sorted(list(set(gold).difference(["no_relation"])))) * 100,
+            'f1_macro'             : f1_score(gold, pred, average='macro') * 100,
+            'f1_micro_withoutnorel': f1_score(gold, pred, average='micro', labels=sorted(list(set(gold).difference(["no_relation"])))) * 100,
+            'f1_macro_withoutnorel': f1_score(gold, pred, average='macro', labels=sorted(list(set(gold).difference(["no_relation"])))) * 100,
         })
     return results
+
+
+# Comented below some alternative. But it does not improve the speed in a noticeable way.
+# def compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds, verbose):
+#     """
+#     Compute the results for each threshold and returns the results
+#     """
+#     results = []
+#     highest_score_val = []
+#     highest_score_rel = []
+#     # Precompute maxes
+#     for ps, pr in zip(pred_scores, pred_relations):
+#         highest_score_val.append(np.max(ps))
+#         highest_score_rel.append(['no_relation', pr[np.argmax(ps)]])
+
+#     highest_score_val = np.array(highest_score_val)
+#     highest_score_rel = np.array(highest_score_rel)
+
+#     for threshold in thresholds:
+#         pred = highest_score_rel[np.arange(highest_score_rel.shape[0]), (highest_score_val>threshold).astype(int)].tolist()
+#         scores = [s * 100 for s in tacred_score(gold, pred, verbose=verbose)] # Make the scores be 0-100
+
+#         results.append({
+#             'threshold'            : threshold,
+#             'p_tacred'             : scores[0],
+#             'r_tacred'             : scores[1],
+#             'f1_tacred'            : scores[2],
+#             'f1_macro'             : f1_score(gold, pred, average='macro') * 100,
+#             'f1_micro'             : f1_score(gold, pred, average='micro') * 100,
+#             'f1_micro_withoutnorel': f1_score(gold, pred, average='micro', labels=sorted(list(set(gold).difference(["no_relation"])))) * 100,
+#             'f1_macro_withoutnorel': f1_score(gold, pred, average='macro', labels=sorted(list(set(gold).difference(["no_relation"])))) * 100,
+#         })
+#     return results
