@@ -163,5 +163,6 @@ logs/
 results/
 lightning_logs/
 data
-
+.vscode
+default_predictions
 
