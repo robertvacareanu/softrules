@@ -170,6 +170,58 @@ def compute_results_with_thresholds(gold, pred_scores, pred_relations, threshold
     return results
 
 
+def compute_results_with_thresholds_parallel(gold, pred_scores, pred_relations, thresholds, verbose, overwrite_results: Union[Dict, str] = {}):
+    """
+    Compute the results for each threshold and returns the results
+    """
+
+    if overwrite_results is None:
+        defaults = {}
+    else:
+        if isinstance(overwrite_results, dict):
+            defaults = overwrite_results
+        elif isinstance(overwrite_results, str):
+            with open(overwrite_results) as fin:
+                defaults = json.load(fin)
+        else:
+            defaults = {}            
+
+    # Map to integer ids (instead of string)
+    defaults = {int(k):v for (k, v) in defaults.items()}
+    print("Default preds: ", defaults)
+    def work_fn(threshold):
+        pred = []
+        for ep_id, (ps, pr) in enumerate(zip(pred_scores, pred_relations)):
+            if ep_id in defaults:
+                pred.append(defaults[ep_id])
+            else:
+                if np.max(ps) > threshold:
+                    pred.append(pr[np.argmax(ps)])
+                else:
+                    pred.append('no_relation')
+        scores = [s * 100 for s in tacred_score(gold, pred, verbose=verbose)] # Make the scores be 0-100
+
+        return {
+            'threshold'            : threshold,
+            'p_tacred'             : scores[0],
+            'r_tacred'             : scores[1],
+            'f1_tacred'            : scores[2],
+            'f1_micro'             : f1_score(gold, pred, average='micro') * 100,
+            'f1_macro'             : f1_score(gold, pred, average='macro') * 100,
+            'f1_micro_withoutnorel': f1_score(gold, pred, average='micro', labels=sorted(list(set(gold).difference(["no_relation"])))) * 100,
+            'f1_macro_withoutnorel': f1_score(gold, pred, average='macro', labels=sorted(list(set(gold).difference(["no_relation"])))) * 100,
+        }
+
+    results = []
+    with multiprocessing.Pool(20) as p:
+        results = p.map(work_fn, thresholds)
+
+    return results
+
+
+
+
+
 # Comented below some alternative. But it does not improve the speed in a noticeable way.
 # def compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds, verbose):
 #     """
