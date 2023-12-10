@@ -22,7 +22,7 @@ Table 1 from https://arxiv.org/pdf/2102.01373.pdf. Similarly, we will use
 
 from typing import Callable, Literal
 
-MarkerTypes = Literal["entity_mask", "entity_marker", "entity_marker_punct", "typed_entity_marker", "typed_entity_marker_punct"]
+MarkerTypes = Literal["entity_mask", "entity_marker", "entity_marker_punct", "typed_entity_marker", "typed_entity_marker_punct", "typed_entity_marker_punct_v2"]
 
 def preprocess_line(original_line, preprocessing_type: MarkerTypes) -> str:
     """
@@ -33,6 +33,7 @@ def preprocess_line(original_line, preprocessing_type: MarkerTypes) -> str:
         - entity_marker_punct
         - typed_entity_marker
         - typed_entity_marker_punct
+        - typed_entity_marker_punct_v2
     """
     line = {**original_line}
     if line['subj_type'].lower().startswith('b-') or line['subj_type'].lower().startswith('i-'):
@@ -67,6 +68,18 @@ def preprocess_line(original_line, preprocessing_type: MarkerTypes) -> str:
         subj_end_marker   = lambda x: f'@'
         obj_start_marker  = lambda x: f'# ^ {x.lower()} ^'
         obj_end_marker    = lambda x: f'#'
+        return entity_marker(line, subj_start_marker, subj_end_marker, obj_start_marker, obj_end_marker)
+    elif preprocessing_type == "typed_entity_marker_punct_v2": # `John Doe was born in New York City` -> `@ * person * John Doe @ was born in @ * loc * New York City @`
+        subj_start_marker = lambda x: f'@ * {x.lower()} *' if x.lower() != 'lexical' else '@ * entity *'
+        subj_end_marker   = lambda x: f'@'
+        obj_start_marker  = lambda x: f'@ * {x.lower()} *' if x.lower() != 'lexical' else '@ * entity *'
+        obj_end_marker    = lambda x: f'@'
+        return entity_marker(line, subj_start_marker, subj_end_marker, obj_start_marker, obj_end_marker)
+    elif preprocessing_type == "typed_entity_marker_punct_v3": # `John Doe was born in New York City` -> `@ * subject person * John Doe @ was born in @ * object loc * New York City @`
+        subj_start_marker = lambda x: f'@ * subject {x.lower()} *' if x.lower() != 'lexical' else f'@ * subject entity *'
+        subj_end_marker   = lambda x: f'@'
+        obj_start_marker  = lambda x: f'@ * object {x.lower()} *' if x.lower() != 'lexical' else f'@ * object entity *'
+        obj_end_marker    = lambda x: f'@'
         return entity_marker(line, subj_start_marker, subj_end_marker, obj_start_marker, obj_end_marker)
     else: # Error
         raise ValueError(f"The processing type `{preprocessing_type}` is not recognized. Is everything ok?")
