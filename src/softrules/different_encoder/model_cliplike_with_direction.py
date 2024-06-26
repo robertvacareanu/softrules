@@ -365,6 +365,17 @@ class SoftRulesEncoder(pl.LightningModule):
             ids       = [y for x in outputs for y in x['id']]
             rels      = [y for x in outputs for y in x['ss_relation']]
             gold_rels = [y for x in outputs for y in x['ts_relation']]
+            
+            rule_direction     = [y for x in outputs for y in x['rule_direction']]
+            sentence_direction = [y for x in outputs for y in x['sentence_direction']]
+
+            rule_entity_ids     = [y for x in outputs for y in x['rule_entity_ids']]
+            sentence_entity_ids = [y for x in outputs for y in x['sentence_entity_ids']]
+
+            rule_lexical_entities_ids     = [y for x in outputs for y in x['rule_lexical_entities']]
+            sentence_lexical_entities_ids = [y for x in outputs for y in x['sentence_lexical_entities']]
+
+            
 
             logit_scale = self.logit_scale.exp().detach().cpu().numpy()
             # rules = logit_scale * rules
@@ -391,20 +402,36 @@ class SoftRulesEncoder(pl.LightningModule):
             pred_scores = []
             relations   = []
             for episode_id, positions in ids_to_position:
+                if self.hyperparameters.get('enforce_rule_direction', False):
+                    positions = [x for x in positions if rule_direction[x] == sentence_direction[x]]
+                if self.hyperparameters.get('enforce_entity_types', False):
+                    positions = [x for x in positions if rule_entity_ids[x] == sentence_entity_ids[x]]
+                # print(positions)
                 rules_for_episode = rules[positions]
                 sents_for_episode = sents[positions]
                 similarities = rules_for_episode @ sents_for_episode.T
-                similarities = similarities[:, 0]
+                # print(similarities)
+                # print("\n")
+                similarities = similarities.diagonal()
 
                 # Aggregate similarities corresponding to the same underlying relation
                 from_rel_to_sim = defaultdict(list)
                 for i, pos in enumerate(positions):
-                    from_rel_to_sim[rels[pos]].append(similarities[i])
+                    if self.hyperparameters.get('boost_when_same_lexicalized_entities', False) and rule_lexical_entities_ids[pos] == sentence_lexical_entities_ids[pos]:
+                        from_rel_to_sim[rels[pos]].append(1.0)
+                    else:
+                        from_rel_to_sim[rels[pos]].append(similarities[i])
                 from_rel_to_sim = dict(from_rel_to_sim)
                 from_rel_to_sim = {k:sorted(v, reverse=True) for (k, v) in from_rel_to_sim.items()}
 
                 from_rel_to_sim_keys = sorted(list(from_rel_to_sim.keys()))
-                similarities = [np.mean(from_rel_to_sim[rel][:self.hyperparameters.get('how_many_rules_to_average', 1)]) for rel in from_rel_to_sim_keys]
+
+                # If there is no rule to be matched we will assume it is `no_relation` with max similarity
+                if len(from_rel_to_sim_keys) == 0:
+                    from_rel_to_sim_keys = ['no_relation']
+                    similarities = [1.0]
+                else:
+                    similarities = [np.mean(from_rel_to_sim[rel][:self.hyperparameters.get('how_many_rules_to_average', 1)]) for rel in from_rel_to_sim_keys]
 
                 pred_scores.append(similarities)
                 relations.append(from_rel_to_sim_keys)
@@ -413,7 +440,10 @@ class SoftRulesEncoder(pl.LightningModule):
 
             results = compute_results_with_thresholds(gold=gold, pred_scores=pred_scores, pred_relations=relations, thresholds=self.thresholds, verbose=False, overwrite_results=dev_default_predictions_path)
             best = max(results, key=lambda x: x['f1_tacred'])
-            compute_results_with_thresholds(gold=gold, pred_scores=pred_scores, pred_relations=relations, thresholds=[best['threshold']], verbose=True, overwrite_results=dev_default_predictions_path)
+            o = compute_results_with_thresholds(gold=gold, pred_scores=pred_scores, pred_relations=relations, thresholds=[best['threshold']], verbose=True, overwrite_results=dev_default_predictions_path, return_gold=True, return_pred=True)
+            # with open('rule4.pickle', 'wb+') as fout:
+                # import pickle
+                # pickle.dump([o[0]['gold'], o[0]['pred']], fout)
             print("\n")
             print("-"*20)
             print("VAL", key, self.hyperparameters['dev_path'][key])
@@ -457,6 +487,7 @@ class SoftRulesEncoder(pl.LightningModule):
             print("-"*20)
             print("\n")
             all_results[key] = results
+            # exit()
 
             if self.hyperparameters.get("append_results_to_file", None):
                 with open(self.hyperparameters["append_results_to_file"], 'a+') as fout:
@@ -474,6 +505,16 @@ class SoftRulesEncoder(pl.LightningModule):
                     _=fout.write(json.dumps(dump))
                     _=fout.write('\n')
 
+            if self.hyperparameters.get("save_predictions", None):
+                with open(self.hyperparameters["save_predictions"], 'a+') as fout:
+                    print(pred_scores)
+                    print(relations)
+                    print(gold)
+                    print(self.hyperparameters)
+                    dump = {'pred_scores': pred_scores.to_list(), 'relations': relations, 'gold': gold, 'args': self.hyperparameters}
+                    _=fout.write(json.dumps(dump))
+                    _=fout.write('\n')
+
         results = all_results[0]
         best = max(results, key=lambda x: x['f1_tacred'])
         self.log('threshold', best['threshold'])
@@ -482,10 +523,6 @@ class SoftRulesEncoder(pl.LightningModule):
         self.log('f1_tacred', best['f1_tacred'])
         
         print(best)
-        # with open('z2.pickle', 'wb+') as fout:
-        #     import pickle
-        #     pickle.dump([self.val_step_outputs, self.val_rule_encodings, self.val_sentence_encodings], fout)
-        # exit()
         # Reset val step outputs
         self.val_step_outputs = defaultdict(list)
 
@@ -627,7 +664,7 @@ class SoftRulesEncoder(pl.LightningModule):
             # 'sentence_id'    : examples['sentence_id'],
         }
 
-    def collate_tokenized_fn(self, batch: List[Dict[str, Any]], keep_columns: List[str] = ['id', 'relation', 'ss_relation', 'ts_relation', 'rule_id', 'sentence_id']) -> Dict[str, Any]:
+    def collate_tokenized_fn(self, batch: List[Dict[str, Any]], keep_columns: List[str] = ['id', 'relation', 'ss_relation', 'ts_relation', 'rule_id', 'sentence_id', 'rule_direction', 'sentence_direction', 'rule_entity_ids', 'sentence_entity_ids', 'rule_lexical_entities', 'sentence_lexical_entities']) -> Dict[str, Any]:
         """
         Define how this model expects the data to be batched
         """
@@ -703,12 +740,16 @@ def read_valdata(dev_path: str, preprocessing_type: str, rules: Dict[str, dict])
     with open(dev_path) as fin:
         val_data = json.load(fin)
     
-    rule_to_id = {}
-    sentence_to_id = {}
+    rule_to_id         = {}
+    sentence_to_id     = {}
+    entity_types_to_id = {}
+    entity_to_id       = {}
     val = []
     idx = -1
     rule_idx = -1
     sent_idx = -1
+    ent_type_idx  = -1
+    ent_idx  = -1
     for episode, selections, relations in zip(val_data[0], val_data[1], val_data[2]):
         for ts in episode['meta_test']:
             sent_idx += 1
@@ -722,11 +763,42 @@ def read_valdata(dev_path: str, preprocessing_type: str, rules: Dict[str, dict])
                 sentence_to_id[processed_sentence] = sent_idx
                 
             for rule, ss_relation in zip(episode_ss_rules, relations):
+                ent_type_idx  += 1
                 rule_idx += 1
                 rule_query = rule['query'].lower().replace(']+  [', ']+ [').replace('=b-', '=').replace('=i-', '=')
                 if rule_query not in rule_to_id:
                     rule_to_id[rule_query] = rule_idx
-                val.append({'id': idx, 'rule': rule_query, 'sentence': processed_sentence, 'ss_relation': ss_relation, 'ts_relation': ts['relation'] if ts['relation'] in relations else 'no_relation', 'rule_id': rule_to_id[rule_query], 'sentence_id': sentence_to_id[processed_sentence]})
+                    
+                if ts['obj_start'] > ts['subj_end']:
+                    fe = ' '.join(ts['token'][ts['subj_start']:(ts['subj_end']+1)])
+                    se = ' '.join(ts['token'][ts['obj_start']:(ts['obj_end']+1)])
+                    if (ts['subj_type'], ts['obj_type']) not in entity_types_to_id:
+                        entity_types_to_id[(ts['subj_type'], ts['obj_type'])] = ent_type_idx
+                        ent_type_idx += 1
+                    sentence_entity_ids = entity_types_to_id[(ts['subj_type'], ts['obj_type'])]
+                else:
+                    fe = ' '.join(ts['token'][ts['obj_start']:(ts['obj_end']+1)])
+                    se = ' '.join(ts['token'][ts['subj_start']:(ts['subj_end']+1)])
+                    if (ts['obj_type'], ts['subj_type']) not in entity_types_to_id:
+                        entity_types_to_id[(ts['obj_type'], ts['subj_type'])] = ent_type_idx
+                        ent_type_idx += 1
+                    sentence_entity_ids = entity_types_to_id[(ts['obj_type'], ts['subj_type'])]
+
+                if (fe, se) not in entity_to_id:
+                    entity_to_id[(fe, se)] = ent_idx
+                    ent_idx += 1
+
+                if (rule['first_entity_type'], rule['second_entity_type']) not in entity_types_to_id:
+                    entity_types_to_id[(rule['first_entity_type'], rule['second_entity_type'])] = ent_type_idx
+
+                r_fe = ' '.join(rule['sentence_tokenized'][rule['first_entity_start']:rule['first_entity_end']]) # NOTE: no more `+1` here as we already add one when we created the rule file
+                r_se = ' '.join(rule['sentence_tokenized'][rule['second_entity_start']:rule['second_entity_end']]) # NOTE: no more `+1` here as we already add one when we created the rule file
+                # TODO small issue here; add to `entity_to_id`, not `entity_types_to_id`
+                if (r_fe, r_se) not in entity_types_to_id:
+                    entity_types_to_id[(r_fe, r_se)] = ent_type_idx
+                    ent_type_idx += 1
+
+                val.append({'id': idx, 'rule': rule_query, 'sentence': processed_sentence, 'ss_relation': ss_relation, 'ts_relation': ts['relation'] if ts['relation'] in relations else 'no_relation', 'rule_id': rule_to_id[rule_query], 'sentence_id': sentence_to_id[processed_sentence], 'rule_direction': int(rule['subj_then_obj_order']), 'sentence_direction': int(ts['obj_start'] > ts['subj_end']), 'rule_entity_ids': entity_types_to_id[(rule['first_entity_type'], rule['second_entity_type'])], 'sentence_entity_ids': sentence_entity_ids, 'rule_lexical_entities': entity_types_to_id[(r_fe, r_se)], 'sentence_lexical_entities': entity_to_id[(fe, se)]})
     print(len(val))
     return val
 
@@ -739,7 +811,7 @@ def get_valdata(args, model, max_length=384, padding=False, load_from_cache_file
     rules = dict(rules)
 
     result = []
-    keep_columns = ['id', 'ss_relation', 'ts_relation', 'rule_id', 'sentence_id']
+    keep_columns = ['id', 'relation', 'ss_relation', 'ts_relation', 'rule_id', 'sentence_id', 'rule_direction', 'sentence_direction', 'rule_entity_ids', 'sentence_entity_ids', 'rule_lexical_entities', 'sentence_lexical_entities']
     for dev_path in args['dev_path']:
         val_data = datasets.Dataset.from_list(read_valdata(dev_path, args['preprocessing_type'], rules=rules))
         # val_data_tok = val_data.map(lambda x: model.tokenize(x, padding=padding, max_length=max_length), batched=True, cache_file_name=model.get_model_tokenization_signature() + "_" + str(max_length) + "_" + str(int(padding)), load_from_cache_file=True, remove_columns=[x for x in val_data.column_names if x not in keep_columns])

@@ -1,0 +1,34 @@
+Per-relation statistics:
+org:founded_by                     P:  15.57%  R:  25.68%  F1:  19.39%  #: 74
+org:member_of                      P:   0.58%  R:  19.05%  F1:   1.13%  #: 21
+org:top_members/employees          P:  16.77%  R:   8.41%  F1:  11.21%  #: 309
+per:children                       P:   6.67%  R:  23.68%  F1:  10.40%  #: 38
+per:city_of_death                  P:   7.45%  R:  52.17%  F1:  13.04%  #: 23
+per:date_of_birth                  P:   6.56%  R:  36.36%  F1:  11.11%  #: 11
+per:origin                         P:  23.08%  R:  17.07%  F1:  19.63%  #: 123
+per:schools_attended               P:  13.04%  R:  46.88%  F1:  20.41%  #: 32
+per:siblings                       P:   3.45%  R:   7.41%  F1:   4.71%  #: 54
+per:stateorprovinces_of_residence  P:  24.66%  R:  20.69%  F1:  22.50%  #: 87
+
+Final Score:
+
+Precision (micro): 7.70%
+   Recall (micro): 17.10%
+       F1 (micro): 10.62%
+
+Per-relation statistics:
+org:founded_by                     P:  13.24%  R:  12.16%  F1:  12.68%  #: 74
+org:member_of                      P:   1.23%  R:  28.57%  F1:   2.36%  #: 21
+org:top_members/employees          P:  30.49%  R:   8.09%  F1:  12.79%  #: 309
+per:children                       P:   6.52%  R:  15.79%  F1:   9.23%  #: 38
+per:city_of_death                  P:  14.81%  R:  34.78%  F1:  20.78%  #: 23
+per:date_of_birth                  P:   6.90%  R:  54.55%  F1:  12.24%  #: 11
+per:origin                         P:  30.77%  R:   9.76%  F1:  14.81%  #: 123
+per:schools_attended               P:  24.39%  R:  31.25%  F1:  27.40%  #: 32
+per:siblings                       P:   3.49%  R:   5.56%  F1:   4.29%  #: 54
+per:stateorprovinces_of_residence  P:  32.43%  R:  13.79%  F1:  19.35%  #: 87
+
+Final Score:
+Precision (micro): 9.04%
+   Recall (micro): 12.56%
+       F1 (micro): 10.51%

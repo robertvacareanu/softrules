@@ -136,6 +136,57 @@ def typed_entity_marker_punct(
 
     return line_tokens
     
+def typed_entity_marker_punct_v2(
+        line, 
+        dropout_entity_type_prob: float           = 0.10, 
+        switch_to_synonym_entity_type_prob: float = 1.00, 
+        entity_synonyms: Dict[str, str] = entity_synonyms_dict,
+        eval_mode = False,
+    ):
+    """
+    :param line
+    :param dropout_entity_type -> Probability to drop the entity type
+    :param entity_synonyms     -> Use some of the synonyms for the entity types (e.g., line says 'PER', we can use 'person' as well)
+    """
+    if eval_mode:
+        if dropout_entity_type_prob > 0.0 or switch_to_synonym_entity_type_prob > 0.0:
+            raise ValueError("Non-zero probabilities passed during eval")
+
+    line_tokens = [[x] for x in line['token']]
+
+    if random.random() < switch_to_synonym_entity_type_prob:
+        new_subj_type = random.choice(entity_synonyms.get(line['subj_type'].lower(), [line['subj_type'].lower()]))
+    else:
+        new_subj_type = line['subj_type'].lower()
+    if random.random() < switch_to_synonym_entity_type_prob:
+        new_obj_type  = random.choice(entity_synonyms.get(line['obj_type'].lower(),  [line['obj_type'].lower()]))
+    else:
+        new_obj_type = line['obj_type'].lower()
+
+    if random.random() < dropout_entity_type_prob:
+        subj_start_marker = f'@ * entity *'
+        subj_end_marker   = '@'
+    else:
+        subj_start_marker = f'@ * {new_subj_type} *'
+        subj_end_marker   = '@'
+
+    if random.random() < dropout_entity_type_prob:
+        obj_start_marker = f'@ * entity *'
+        obj_end_marker   = '@'
+    else:
+        obj_start_marker = f'@ * {new_obj_type} *'
+        obj_end_marker   = '@'
+
+
+    line_tokens[line['subj_start']] = [subj_start_marker] + line_tokens[line['subj_start']]
+    line_tokens[line['subj_end']]   = line_tokens[line['subj_end']] + [subj_end_marker]
+    line_tokens[line['obj_start']] = [obj_start_marker] + line_tokens[line['obj_start']]
+    line_tokens[line['obj_end']] = line_tokens[line['obj_end']] + [obj_end_marker]
+    
+    line_tokens = ' '.join([' '.join(x) for x in line_tokens])    
+
+    return line_tokens
+    
 
 if __name__ == "__main__":
     """
@@ -153,3 +204,13 @@ if __name__ == "__main__":
     print(typed_entity_marker_punct(line))
     print(typed_entity_marker_punct(line))
     print(typed_entity_marker_punct(line))
+    print("\n\n")
+    print("\n\n")
+    print("\n\n")
+    print(typed_entity_marker_punct_v2(line, 0.0, 0.0))
+    print("\n\n")
+    print(typed_entity_marker_punct_v2(line))
+    print(typed_entity_marker_punct_v2(line))
+    print(typed_entity_marker_punct_v2(line))
+    print(typed_entity_marker_punct_v2(line))
+    print(typed_entity_marker_punct_v2(line))

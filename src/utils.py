@@ -124,7 +124,7 @@ def read_rules(path: str):
 
     return result
 
-def compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds, verbose, overwrite_results: Union[Dict, str] = {}):
+def compute_results_with_thresholds(gold, pred_scores, pred_relations, thresholds, verbose, overwrite_results: Union[Dict, str] = {}, return_gold: bool = False, return_pred: bool = False):
     """
     Compute the results for each threshold and returns the results
     """
@@ -142,7 +142,10 @@ def compute_results_with_thresholds(gold, pred_scores, pred_relations, threshold
 
     # Map to integer ids (instead of string)
     defaults = {int(k):v for (k, v) in defaults.items()}
-    print("Default preds: ", defaults)
+    if len(defaults) > 50:
+        print("Default preds: ", dict(list(defaults.items())[:20]), "..")
+    else:
+        print("Default preds: ", defaults)
 
     results = []
     for threshold in thresholds:
@@ -157,16 +160,24 @@ def compute_results_with_thresholds(gold, pred_scores, pred_relations, threshold
                     pred.append('no_relation')
         scores = [s * 100 for s in tacred_score(gold, pred, verbose=verbose)] # Make the scores be 0-100
 
-        results.append({
-            'threshold'            : threshold,
-            'p_tacred'             : scores[0],
-            'r_tacred'             : scores[1],
-            'f1_tacred'            : scores[2],
-            'f1_micro'             : f1_score(gold, pred, average='micro') * 100,
-            'f1_macro'             : f1_score(gold, pred, average='macro') * 100,
-            'f1_micro_withoutnorel': f1_score(gold, pred, average='micro', labels=sorted(list(set(gold).difference(["no_relation"])))) * 100,
-            'f1_macro_withoutnorel': f1_score(gold, pred, average='macro', labels=sorted(list(set(gold).difference(["no_relation"])))) * 100,
-        })
+        current_result = {
+            'threshold'                      : threshold,
+            'p_tacred'                       : scores[0],
+            'r_tacred'                       : scores[1],
+            'f1_tacred'                      : scores[2],
+            'f1_micro'                       : f1_score(gold, pred, average='micro') * 100,
+            'f1_macro'                       : f1_score(gold, pred, average='macro') * 100,
+            'f1_micro_withoutnorel'          : f1_score(gold, pred, average='micro', labels=sorted(list(set(gold).difference(["no_relation"])))) * 100,
+            'f1_macro_withoutnorel'          : f1_score(gold, pred, average='macro', labels=sorted(list(set(gold).difference(["no_relation"])))) * 100,
+            # 'confusion_matrix_without_no_rel': confusion_matrix(gold, pred, labels=sorted(list(set(gold).difference(["no_relation"])))).tolist(),
+            # 'confusion_matrix_with_no_rel'   : confusion_matrix(gold, pred, labels=sorted(list(set(gold)))).tolist(),
+        }
+        if return_gold:
+            current_result['gold'] = gold
+        if return_pred:
+            current_result['pred'] = pred
+        results.append(current_result)
+    
     return results
 
 

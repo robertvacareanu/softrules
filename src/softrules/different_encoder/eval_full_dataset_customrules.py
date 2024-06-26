@@ -6,12 +6,11 @@ import argparse
 import json
 import tqdm
 import torch
-import random
 from src.baseline.entity_marker_cross_encoder import preprocess_line
 
 from collections import defaultdict, Counter
 
-from src.softrules.different_encoder.model_cliplike_with_direction import SoftRulesEncoder, read_rules, get_valdata
+from src.softrules.different_encoder.model_cliplike_multidata import SoftRulesEncoder, read_rules, get_valdata
 from src.utils import tacred_score, compute_results_with_thresholds
 
 from torch.utils.data import DataLoader
@@ -100,6 +99,7 @@ def custom_rules2():
             '[entity=person]+ <nsubj founded >dobj [entity=organization]+', 
             "[entity=founder]+ 's [entity=organization]+", 
             "[entity=person]+ >appos founder >nmod_of [entity=organization]+"
+
         ],
         'per:employee_of'                    : [
             '[entity=person]+ is a member of [entity=organization]+', 
@@ -114,6 +114,7 @@ def custom_rules2():
             "[entity=city]+ <dep [entity=person]+",
             '[entity=person]+ <nsubj lives >nmod_in [entity=city]+',
             '[entity=person]+ who resides in [entity=city]+',
+            '[entity=person]+ lives in [entity=city]+',
         ],
         "per:children"                       : [
             "[entity=person]+ daughter of [entity=person]+",
@@ -124,6 +125,7 @@ def custom_rules2():
         "per:title"                          : [
             "[entity=title]+ [entity=person]+",
             "[entity=title]+ <compound [entity=person]+",
+            "[entity=title]+ <appos [entity=person]+",
         ],
         "per:siblings"                       : [
             '[entity=person]+ is a sibbling of [entity=person]+',
@@ -163,6 +165,7 @@ def custom_rules2():
             "[entity=person]+ , [entity=country]+",
             "[entity=person]+ <nsubj native >nmod_of [entity=country]+",
             "[entity=person]+ lives in [entity=country]+",
+            "[entity=person]+ 's home is in [entity=country]+",
             "[entity=person]+ who's residence is in [entity=country]+",
         ],
         "org:city_of_headquarters"           : [
@@ -173,7 +176,7 @@ def custom_rules2():
             "[entity=organization]+ >nmod_in [entity=city]+",
         ],
         "org:members"                        : [
-            # "[entity=organization]+ includes [entity=country]+",
+            "[entity=organization]+ includes [entity=country]+",
             "[entity=organization]+ >nmod_of [entity=organization]+",
         ],
         "org:country_of_headquarters"        : [
@@ -296,13 +299,274 @@ def custom_rules2():
 
     return [(x, z) for (x, y) in rules.items() for z in y]
 
+def custom_rules3():
+    rules = {
+        'org:founded_by'                     : [
+            ("[entity=PERSON]+ <nsubj founded >dobj [entity=ORGANIZATION]+", "PERSON", "ORGANIZATION", False),
+
+        ],
+        'per:employee_of'                    : [
+            ("[entity=PERSON]+ works for [entity=ORGANIZATION]+", "PERSON", "ORGANIZATION", True),
+            ("[entity=PERSON]+ <nsubj works >nmod_for [entity=ORGANIZATION]+", "PERSON", "ORGANIZATION", True),
+            ("[entity=PERSON]+ is employed by [entity=ORGANIZATION]+", "PERSON", "ORGANIZATION", True),
+            ("[entity=PERSON]+ is an employee at [entity=ORGANIZATION]+", "PERSON", "ORGANIZATION", True),
+        ],
+        'org:alternate_names'                : [
+            ("[entity=SUBJECT ORGANIZATION]+ is also known as [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+        ],
+        "per:cities_of_residence"            : [
+            ("[entity=PERSON]+ <nsubj native >nmod_of [entity=CITY]+", "PERSON", "CITY", True),
+            ("[entity=PERSON]+ <nsubj moved >nmod_to [entity=CITY]+", "PERSON", "CITY", True),
+            ("[entity=PERSON]+ <nmod:poss home >nmod_in [entity=CITY]+", "PERSON", "CITY", True),
+            ("[entity=PERSON]+ <nsubj lives >nmod_in [entity=CITY]+", "PERSON", "CITY", True),
+        ],
+        "per:children"                       : [
+            ("[entity=CHILD]+ daughter of [entity=PARENT]+", "CHILD", "PARENT", True),
+            ("[entity=CHILD]+ son of [entity=PARENT]+", "CHILD", "PARENT", True),
+        ],
+        "per:title"                          : [
+            ("[entity=TITLE]+ [entity=PERSON]+", "TITLE", "PERSON", False),
+            ("[entity=TITLE]+ <compound [entity=PERSON]+", "TITLE", "PERSON", False),
+            ("[entity=TITLE]+ <appos [entity=PERSON]+", "TITLE", "PERSON", False),
+        ],
+        "per:siblings"                       : [
+            ("[entity=SUBJECT PERSON]+ is a sibbling of [entity=OBJECT PERSON]+", "PERSON", "PERSON", True),
+            ("[entity=SUBJECT PERSON]+ is brother of [entity=OBJECT PERSON]+", "PERSON", "PERSON", True),
+            ("[entity=SUBJECT PERSON]+ is sister of [entity=OBJECT PERSON]+", "PERSON", "PERSON", True),
+            ("[entity=SIBBLING]+ of [entity=SIBBLING]+", "SIBBLING", "SIBBLING", True),
+        ],
+        "per:religion"                       : [
+            ("[entity=PERSON]+ <nsubj has >nmod [entity=RELIGION]+", "PERSON", "RELIGION", True),
+            ("[entity=PERSON]+ is [entity=RELIGION]+", "PERSON", "RELIGION", True),
+        ],
+        "per:age"                            : [
+            ("[entity=PERSON]+ , [entity=NUMBER]+", "PERSON", "NUMBER", True),
+            ("[entity=PERSON]+ <nsubj dies >nmod_at [entity=NUMBER]+", "PERSON", "NUMBER", True),
+            ("[entity=PERSON]+ is [entity=NUMBER]+", "PERSON", "NUMBER", True),
+            ("[entity=PERSON]+ ' age is [entity=NUMBER]+", "PERSON", "NUMBER", True),
+        ],
+        "org:website"                        : [
+            ("[entity=ORGANIZATION]+ : [entity=URL]+", "ORGANIZATION", "URL", True),
+            ("[entity=ORGANIZATION]+ <compound [entity=URL]+", "ORGANIZATION", "URL", True),
+            ("[entity=ORGANIZATION]+ [entity=URL]+", "ORGANIZATION", "URL", True),
+        ],
+        "per:stateorprovinces_of_residence"  : [
+            ("[entity=PERSON]+ <nsubj native >nmod_of [entity=STATE_OR_PROVINCE]+", "PERSON", "STATE_OR_PROVINCE", True),
+            ("[entity=PERSON]+ <nsubj moved >nmod_to [entity=STATE_OR_PROVINCE]+", "PERSON", "STATE_OR_PROVINCE", True),
+            ("[entity=PERSON]+ <nmod:poss home >nmod_in [entity=STATE_OR_PROVINCE]+", "PERSON", "STATE_OR_PROVINCE", True),
+            ("[entity=PERSON]+ <nsubj lives >nmod_in [entity=STATE_OR_PROVINCE]+", "PERSON", "STATE_OR_PROVINCE", True),
+        ],
+        "org:member_of"                      : [
+            ("[entity=SUBJECT ORGANIZATION]+ joined [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+            ("[entity=SUBJECT ORGANIZATION]+ <nsubj is >nmod_of [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+            ("[entity=SUBJECT ORGANIZATION]+ is part of [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+            ("[entity=SUBJECT ORGANIZATION]+ 's , [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+        ],
+        "org:top_members/employees"          : [
+            ("[entity=PERSON]+ >appos employee >nmod_of [entity=ORGANIZATION]+", "PERSON", "ORGANIZATION", False),
+            ("[entity=PERSON]+ is a top employee of [entity=ORGANIZATION]+", "PERSON", "ORGANIZATION", False),
+        ],
+        "per:countries_of_residence"         : [
+            ("[entity=PERSON]+ <nsubj native >nmod_of [entity=COUNTRY]+", "PERSON", "COUNTRY", True),
+            ("[entity=PERSON]+ <nsubj moved >nmod_to [entity=COUNTRY]+", "PERSON", "COUNTRY", True),
+            ("[entity=PERSON]+ <nmod:poss home >nmod_in [entity=COUNTRY]+", "PERSON", "COUNTRY", True),
+            ("[entity=PERSON]+ <nsubj lives >nmod_in [entity=COUNTRY]+", "PERSON", "COUNTRY", True),
+        ],
+        "org:city_of_headquarters"           : [
+            ("[entity=ORGANIZATION]+ just outside [entity=CITY]+", "ORGANIZATION", "CITY", True),
+            ("[entity=ORGANIZATION]+ >appos firm >nmod_in [entity=CITY]+", "ORGANIZATION", "CITY", True),
+            ("[entity=CITY]+ [entity=ORGANIZATION]+", "CITY", "ORGANIZATION", False),
+            ("[entity=ORGANIZATION]+ in [entity=CITY]+", "ORGANIZATION", "CITY", True),
+            ("[entity=ORGANIZATION]+ >nmod_in [entity=CITY]+", "ORGANIZATION", "CITY", True),
+            ("[entity=ORGANIZATION]+ has headquarters in [entity=CITY]+", "ORGANIZATION", "CITY", True),
+        ],
+        "org:members"                        : [
+            ("[entity=OBJECT ORGANIZATION]+ includes [entity=SUBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", False),
+            ("[entity=SUBJECT ORGANIZATION]+ is a member of [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+            ("[entity=SUBJECT ORGANIZATION]+ joined [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+            ("[entity=SUBJECT ORGANIZATION]+ >nmod_of [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+        ],
+        "org:country_of_headquarters"        : [
+            ("[entity=ORGANIZATION]+ >appos firm >nmod_in [entity=COUNTRY]+", "ORGANIZATION", "COUNTRY", True),
+            ("[entity=ORGANIZATION]+ >appos firm >nmod_in [entity=COUNTRY]+", "ORGANIZATION", "COUNTRY", True),
+            ("[entity=COUNTRY]+ [entity=ORGANIZATION]+", "COUNTRY", "ORGANIZATION", False),
+            ("[entity=ORGANIZATION]+ in [entity=COUNTRY]+", "ORGANIZATION", "COUNTRY", True),
+            ("[entity=ORGANIZATION]+ >nmod_in [entity=COUNTRY]+", "ORGANIZATION", "COUNTRY", True),
+            ("[entity=ORGANIZATION]+ has headquarters in [entity=COUNTRY]+", "ORGANIZATION", "COUNTRY", True),
+        ],
+        "per:spouse"                         : [
+            ("[entity=SUBJECT PERSON]+ spouse of [entity=OBJECT PERSON]+", "PERSON", "PERSON", True),
+            ("[entity=SUBJECT PERSON]+ marriage to [entity=OBJECT PERSON]+", "PERSON", "PERSON", False),
+        ],
+        "org:stateorprovince_of_headquarters": [
+            ("[entity=ORGANIZATION]+ >appos firm >nmod_in [entity=STATE_OR_PROVINCE]+", "ORGANIZATION", "STATE_OR_PROVINCE", True),
+            ("[entity=ORGANIZATION]+ >appos firm >nmod_in [entity=STATE_OR_PROVINCE]+", "ORGANIZATION", "STATE_OR_PROVINCE", True),
+            ("[entity=STATE_OR_PROVINCE]+ [entity=ORGANIZATION]+", "STATE_OR_PROVINCE", "ORGANIZATION", False),
+            ("[entity=ORGANIZATION]+ in [entity=STATE_OR_PROVINCE]+", "ORGANIZATION", "STATE_OR_PROVINCE", True),
+            ("[entity=ORGANIZATION]+ >nmod_in [entity=STATE_OR_PROVINCE]+", "ORGANIZATION", "STATE_OR_PROVINCE", True),
+            ("[entity=ORGANIZATION]+ has headquarters in [entity=STATE_OR_PROVINCE]+", "ORGANIZATION", "STATE_OR_PROVINCE", True),
+        ],
+        "org:number_of_employees/members"    : [
+            ("[entity=ORGANIZATION]+ , with [entity=NUMBER]+", "ORGANIZATION", "NUMBER", True),
+            ("[entity=ORGANIZATION]+ employs nearly [entity=NUMBER]+", "ORGANIZATION", "NUMBER", True),
+            ("[entity=ORGANIZATION]+ has about [entity=NUMBER]+", "ORGANIZATION", "NUMBER", True),
+            ("[entity=ORGANIZATION]+ <nsubj has >dobj employees >nummod [entity=NUMBER]+", "ORGANIZATION", "NUMBER", True),
+            ("[entity=ORGANIZATION]+ <nsubj has >dobj members >nummod [entity=NUMBER]+", "ORGANIZATION", "NUMBER", True),
+        ],
+        "org:parents"                        : [
+            ("[entity=OBJECT ORGANIZATION]+ , a SUBJECT part of [entity=ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", False),
+            ("[entity=OBJECT ORGANIZATION]+ is a SUBJECT branch of [entity=ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", False),
+            ("[entity=OBJECT ORGANIZATION]+ is a SUBJECT subsidiary of [entity=ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", False),
+            ("[entity=SUBJECT ORGANIZATION]+ <nsubj parent >nmod_of [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+            ("[entity=OBJECT ORGANIZATION]+ <nsubj unit >SUBJECT nmod_of [entity=ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", False),
+            ("[entity=SUBJECT ORGANIZATION]+ <nsubj bought >dobj [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+            ("[entity=OBJECT ORGANIZATION]+ >nmod_under [entity=SUBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", False),
+            ("[entity=OBJECT ORGANIZATION]+ >appos arm >SUBJECT nmod:poss [entity=ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", False),
+            ("[entity=OBJECT ORGANIZATION]+ 's [entity=SUBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", False),
+            ("[entity=OBJECT ORGANIZATION]+ owned by [SUBJECT entity=ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", False),
+        ],
+        "org:subsidiaries"                   : [
+            ("[entity=SUBJECT SUBSIDIARY]+ , a part of [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+            ("[entity=SUBJECT ORGANIZATION]+ is a branch of [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+            ("[entity=SUBJECT ORGANIZATION]+ is a subsidiary of [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+            ("[entity=OBJECT PARENT ORGANIZATION]+ <nsubj SUBJECT parent >nmod_of [entity=SUBSIDIARY ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", False),
+            ("[entity=SUBJECT ORGANIZATION]+ <nsubj unit >nmod_of [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+            ("[entity=OBJECT ORGANIZATION]+ <nsubj bought >SUBJECT dobj [entity=ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", False),
+            ("[entity=SUBJECT ORGANIZATION]+ >nmod_under [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+            ("[entity=SUBJECT ORGANIZATION]+ >appos arm >nmod:poss [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+            ("[entity=SUBJECT ORGANIZATION]+ 's [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+            ("[entity=SUBJECT ORGANIZATION]+ owned by [entity=OBJECT ORGANIZATION]+", "ORGANIZATION", "ORGANIZATION", True),
+        ],
+        "per:origin"                         : [
+            ("[entity=NATIONALITY]+ <nsubj [entity=PERSON]+", "NATIONALITY", "PERSON", False),
+            ("[entity=NATIONALITY]+ is the nationality of [entity=PERSON]+", "NATIONALITY", "PERSON", False),
+            ("[entity=ENTITY]+ is the nationality of [entity=PERSON]+", "ENTITY", "PERSON", False),
+            ("[entity=COUNTRY]+ of [entity=PERSON]+", "COUNTRY", "PERSON", False),
+            ("[entity=PERSON]+ is [entity=NATIONALITY]+", "PERSON", "NATIONALITY", True),
+            ("[entity=PERSON]+ is originally from [entity=COUNTRY]+", "PERSON", "COUNTRY", True),
+            ("[entity=PERSON]+ 's nationality is [entity=NATIONALITY]+", "PERSON", "NATIONALITY", True),
+
+        ],
+        "org:political/religious_affiliation": [
+            ("[entity=IDEOLOGY]+ group [entity=ORGANIZATION]+", "IDEOLOGY", "ORGANIZATION", False),
+            ("[entity=RELIGION]+ group [entity=ORGANIZATION]+", "RELIGION", "ORGANIZATION", False),
+            ("[entity=RELIGION]+ <amod [entity=ORGANIZATION]+", "RELIGION", "ORGANIZATION", False),
+            ("[entity=ORGANIZATION]+ has a religious affiliation with [entity=RELIGION]+", "ORGANIZATION", "RELIGION", True),
+            ("[entity=ORGANIZATION]+ has a political affiliation with [entity=IDEOLOGY]+", "ORGANIZATION", "IDEOLOGY", True),
+        ],
+        "per:other_family"                   : [
+            ("[entity=SUBJECT PERSON]+ is relative of [entity=OBJECT PERSON]+", "PERSON", "PERSON", True),
+            ("[entity=SUBJECT PERSON]+ is family of [entity=OBJECT PERSON]+", "PERSON", "PERSON", True),
+            ("[entity=SUBJECT PERSON]+ is related to [entity=OBJECT PERSON]+", "PERSON", "PERSON", True),
+        ],
+        "per:stateorprovince_of_birth"       : [
+            ("[entity=PERSON]+ was born in [entity=STATE_OR_PROVINCE]+", "PERSON", "STATE_OR_PROVINCE", True),
+            ("[entity=PERSON]+ <nsubj born >nmod_in [entity=STATE_OR_PROVINCE]+", "PERSON", "STATE_OR_PROVINCE", True),
+
+        ],
+        "org:dissolved"                      : [
+            ("[entity=ORGANIZATION]+ dissolved on [entity=DATE]+", "ORGANIZATION", "DATE", True),
+            ("[entity=ORGANIZATION]+ existed until [entity=DATE]+", "ORGANIZATION", "DATE", True),
+            ("[entity=ORGANIZATION]+ dissolved in [entity=DATE]+", "ORGANIZATION", "DATE", True),
+            ("[entity=ORGANIZATION]+ disbanded in [entity=DATE]+", "ORGANIZATION", "DATE", True),
+            ("[entity=ORGANIZATION]+ <nsubj dissolved >nmod_on [entity=DATE]+", "ORGANIZATION", "DATE", True),
+            ("[entity=ORGANIZATION]+ <nsubj dissolved >nmod_in [entity=DATE]+", "ORGANIZATION", "DATE", True),
+        ],
+        "per:date_of_death"                  : [
+            ("[entity=PERSON]+ died [entity=DATE]+", "PERSON", "DATE", True),
+            ("[entity=PERSON]+ <nsubj died >nmod:tmod [entity=DATE]+", "PERSON", "DATE", True),
+            ("[entity=PERSON]+ <nsubj died >nmod_in [entity=DATE]+", "PERSON", "DATE", True),
+            ("[entity=PERSON]+ <nsubj died >nmod_on [entity=DATE]+", "PERSON", "DATE", True),
+        ],
+        "org:shareholders"                   : [
+            ("[entity=PERSON]+ <nsubj shareholders >nmod_at [entity=ORGANIZATION]+", "PERSON", "ORGANIZATION", True),
+            ("[entity=PERSON]+ owns stock in [entity=ORGANIZATION]+", "PERSON", "ORGANIZATION", True),
+            ("[entity=PERSON]+ is a shareholder in [entity=ORGANIZATION]+", "PERSON", "ORGANIZATION", True),
+            ("[entity=SHAREHOLDER]+ of [entity=ORGANIZATION]+", "SHAREHOLDER", "ORGANIZATION", True),
+            ("[entity=PERSON]+ holds shares in [entity=ORGANIZATION]+", "PERSON", "ORGANIZATION", True),
+            ("[entity=PERSON]+ who owns stock in [entity=ORGANIZATION]+", "PERSON", "ORGANIZATION", True),
+
+        ],
+        "per:alternate_names"                : [
+            ("[entity=SUBJECT PERSON]+ , whose real name is [entity=OBJECT PERSON]+", "PERSON", "PERSON", True),
+            ("[entity=SUBJECT PERSON]+ known as [entity=OBJECT PERSON]+", "PERSON", "PERSON", True),
+            ("[entity=SUBJECT PERSON]+ also named [entity=OBJECT PERSON]+", "PERSON", "PERSON", True),
+        ],
+        "per:parents"                        : [
+            ("[entity=SUBJECT PERSON]+ -lrb- son of [entity=OBJECT PERSON]+", "PERSON", "PERSON", True),
+            ("[entity=SUBJECT PERSON]+ >appos daughter >nmod_of [entity=OBJECT PERSON]+", "PERSON", "PERSON", True),
+            ("[entity=SUBJECT PERSON]+ is the son of [entity=OBJECT PERSON]+", "PERSON", "PERSON", True),
+            ("[entity=PARENT]+ of [entity=PERSON]+", "PARENT", "PERSON", True),
+            ("[entity=PARENT]+ of [entity=CHILD]+", "PARENT", "CHILD", True),
+        ],
+        "per:schools_attended"               : [
+            ("[entity=PERSON]+ is a graduate of [entity=ORGANIZATION]+", "PERSON", "ORGANIZATION", True),
+            ("[entity=PERSON]+ <nsubj graduated >nmod_from [entity=ORGANIZATION]+", "PERSON", "ORGANIZATION", True),
+            ("[entity=PERSON]+ <nsubj studied >nmod_at [entity=ORGANIZATION]+", "PERSON", "ORGANIZATION", True),
+            ("[entity=PERSON]+ attended [entity=SCHOOL]+", "PERSON", "SCHOOL", True),
+        ],
+        "per:cause_of_death"                 : [
+            ("[entity=PERSON]+ <nsubj died >nmod_of [entity=CAUSE_OF_DEATH]+", "PERSON", "CAUSE_OF_DEATH", True),
+            ("[entity=PERSON]+ <nsubj died >nmod_from [entity=CAUSE_OF_DEATH]+", "PERSON", "CAUSE_OF_DEATH", True),
+            ("[entity=PERSON]+ died of [entity=CAUSE_OF_DEATH]+", "PERSON", "CAUSE_OF_DEATH", True),
+            ("[entity=PERSON]+ <nsubj died >nmod_after battle >nmod_with [entity=CAUSE_OF_DEATH]+", "PERSON", "CAUSE_OF_DEATH", True),
+        ],
+        "per:city_of_death"                  : [
+            ("[entity=PERSON]+ <nsubj died >nmod_in [entity=CITY]+", "PERSON", "CITY", True),
+            ("[entity=PERSON]+ died in [entity=CITY]+", "PERSON", "CITY", True),
+        ],
+        "per:stateorprovince_of_death"       : [
+            ("[entity=PERSON]+ died in [entity=STATE_OR_PROVINCE]+", "PERSON", "STATE_OR_PROVINCE", True),
+        ],
+        "org:founded"                        : [
+            ("[entity=ORGANIZATION]+ , established in [entity=DATE]+", "ORGANIZATION", "DATE", True),
+            ("[entity=ORGANIZATION]+ , which was founded in [entity=DATE]+", "ORGANIZATION", "DATE", True),
+        ],
+        "per:country_of_birth"               : [
+            ("[entity=PERSON]+ <nsubj born >nmod_in [entity=COUNTRY]+", "PERSON", "COUNTRY", True),
+            ("[entity=PERSON]+ <nsubjpass born >nmod_in [entity=COUNTRY]+", "PERSON", "COUNTRY", True),
+            ("[entity=PERSON]+ , who was born in [entity=COUNTRY]+", "PERSON", "COUNTRY", True),
+            ("[entity=PERSON]+ 's birthplace is [entity=COUNTRY]+", "PERSON", "COUNTRY", True),
+            ("[entity=PERSON]+ born in [entity=COUNTRY]+", "PERSON", "COUNTRY", True),
+        ],
+        "per:date_of_birth"                  : [
+            ("[entity=PERSON]+ was born on [entity=DATE]+", "PERSON", "DATE", True),
+            ("[entity=PERSON]+ <nsubjpass born >nmod_on [entity=DATE]+", "PERSON", "DATE", True),
+            ("[entity=PERSON]+ <nsubjpass born >nmod_in [entity=DATE]+", "PERSON", "DATE", True),
+            ("[entity=PERSON]+ 's birthday is on [entity=DATE]+", "PERSON", "DATE", True),
+        ],
+        "per:city_of_birth"                  : [
+            ("[entity=PERSON]+ <nsubj born >nmod_in [entity=CITY]+", "PERSON", "CITY", True),
+            ("[entity=PERSON]+ <nsubjpass born >nmod_in [entity=CITY]+", "PERSON", "CITY", True),
+            ("[entity=PERSON]+ , who was born in [entity=CITY]+", "PERSON", "CITY", True),
+            ("[entity=PERSON]+ 's birthplace is [entity=CITY]+", "PERSON", "CITY", True),
+            ("[entity=PERSON]+ born in [entity=CITY]+", "PERSON", "CITY", True),
+        ],
+        "per:charges"                        : [
+            ("[entity=PERSON]+ was accused with two others on federal charges of [entity=CRIMINAL_CHARGE]+",  "PERSON", "CRIMINAL_CHARGE", True),
+            ("[entity=PERSON]+ convicted of [entity=CRIMINAL_CHARGE]+",  "PERSON", "CRIMINAL_CHARGE", True),
+            ("[entity=PERSON]+ was convicted of [entity=CRIMINAL_CHARGE]+",  "PERSON", "CRIMINAL_CHARGE", True),
+            ("[entity=CRIMINAL_CHARGE]+ are the charges of [entity=PERSON]+",  "CRIMINAL_CHARGE", "PERSON", False),
+            ("[entity=PERSON]+ was accused of [entity=CRIMINAL_CHARGE]+",  "PERSON", "CRIMINAL_CHARGE", True),
+            ("[entity=PERSON]+ <nsubj accused >nmod_of [entity=CRIMINAL_CHARGE]+",  "PERSON", "CRIMINAL_CHARGE", True),
+            ("[entity=PERSON]+ <nsubj charged >nmod_of [entity=CRIMINAL_CHARGE]+",  "PERSON", "CRIMINAL_CHARGE", True),
+        ],
+        "per:country_of_death"               : [
+            ("[entity=PERSON]+ <nsubj died >nmod_in [entity=COUNTRY]+", "PERSON", "COUNTRY", True),
+            ("[entity=PERSON]+ died in [entity=COUNTRY]+", "PERSON", "COUNTRY", True),
+        ],
+    }
+
+
+    return [(x, z[0]) for (x, y) in rules.items() for z in y]
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=str,) # /storage/rvacareanu/code/projects_7_2309/softrules/lightning_logs/version_113/checkpoints/epoch=0-step=85000.ckpt
     parser.add_argument("--how_many_rules_to_average", type=int, default=1)
     parser.add_argument("--rules_path", type=str, nargs='+', default=[
-        "/storage/rvacareanu/data/softrules/rules/fsre_dataset/TACRED_full_trainonly/enhanced_syntax_with_lexicalized_partial.jsonl", 
-        "/storage/rvacareanu/data/softrules/rules/fsre_dataset/TACRED_full_trainonly/surface_with_lexicalized_partial.jsonl", 
+        "/storage/rvacareanu/data/softrules/rules/fsre_dataset/TACRED_full_trainonly/surface.jsonl", 
+        "/storage/rvacareanu/data/softrules/rules/fsre_dataset/TACRED_full_trainonly/enhanced_syntax.jsonl", 
     ])
     parser.add_argument("--train_path", type=str, default="/storage/rvacareanu/data/softrules/fsre_dataset/TACRED_full/train.json")
     parser.add_argument("--test_path",  type=str, default="/storage/rvacareanu/data/softrules/fsre_dataset/TACRED_full/dev.json")
@@ -312,27 +576,16 @@ if __name__ == "__main__":
     parser.add_argument('--use_rules_for_no_relation', action='store_true', help='Whether to use rules for the `no_relation` class.')
     parser.add_argument('--unique_rules', action='store_true')
     parser.add_argument("--keep_rules_above_count", type=int, default=0, help="Keep the rules (<`relation`, `rule`> tuples) that appear more (>) than this number")
-    parser.add_argument("--threshold", type=float, default=None, help="What threshold to use; If None, use `np.linspace(0.2, 1, 81).tolist()`")
-    parser.add_argument('--subsample_data', action='store_true', help='If true, use only 1% of the data')
 
 
     args = vars(parser.parse_args())
     print(args)
     pl.seed_everything(1)
-
-    if args['threshold']: 
-        selected_thresholds = [args['threshold']]
-    else:
-        selected_thresholds = None
-
-    
     model = SoftRulesEncoder.load_from_checkpoint(args['checkpoint']).eval()
-    model.thresholds = selected_thresholds or np.linspace(0, 1, 101).tolist()
+    model.thresholds = np.linspace(0, 1, 101).tolist()
     model.hyperparameters['append_results_to_file'] = None
     model.hyperparameters['dev_path'] = args['test_path']
     model.hyperparameters['how_many_rules_to_average'] = args['how_many_rules_to_average']
-    model.hyperparameters['enforce_rule_direction']               = True
-    model.hyperparameters['enforce_entity_types']                 = True
 
     with open(args['train_path']) as fin:
         train = json.load(fin)
@@ -343,24 +596,8 @@ if __name__ == "__main__":
     else:
         default_predictions_path = {}
 
-    rules = read_rules(args['rules_path'])
-    rules = dict(rules)
-
-    # Get the rules over the sentences in training; Decide whether to include no relation or not
-    if args['use_rules_for_no_relation']:
-        train_rules = [y for line in train for y in rules[line_to_hash(line, use_all_fields=True)]]
-    else:
-        train_rules = [y for line in train for y in rules[line_to_hash(line, use_all_fields=True)] if line['relation'] != 'no_relation']
-
-    train_rules = [(x['relation'], x['query'].lower()) for x in train_rules]
-    train_rules = sorted(train_rules)
-    train_rules_counter = Counter(train_rules)
-    train_rules = [x for x in train_rules if train_rules_counter[x] > args['keep_rules_above_count']]
-    if args['unique_rules']:
-        train_rules = sorted(list(set(train_rules)))
-
-    # train_rules = custom_rules2()
-    # print(len(train_rules))
+    train_rules = custom_rules3()
+    print(len(train_rules))
     
     # Store the relation associated with each rule
     rules_relations = [x[0] for x in train_rules]
@@ -377,17 +614,14 @@ if __name__ == "__main__":
 
     with open(args['test_path']) as fin:
         test_sentences = json.load(fin)
-        if args['subsample_data']:
-            r = random.Random(1)
-            test_sentences = r.sample(test_sentences, k=int(len(test_sentences) * 0.01))
     
     # Store the relation of each sentence
     sentences_gold = [x['relation'] for x in test_sentences]
 
     # Tokenize, then construct the dataset and the dataloader
-    sentences_tokenized = model.tokenize_sentences([preprocess_line(x, 'typed_entity_marker_punct_v2') for x in test_sentences])
+    sentences_tokenized = model.tokenize_sentences([preprocess_line(x, 'typed_entity_marker_punct_v3') if x['subj_type'] == x['obj_type'] else preprocess_line(x, 'typed_entity_marker_punct_v2') for x in test_sentences])
     sentences_dataset = datasets.Dataset.from_dict(sentences_tokenized)
-    sentences_dl = DataLoader(sentences_dataset, batch_size=64, collate_fn=lambda rule_inputs: model.data_collator_rule(rule_inputs))
+    sentences_dl = DataLoader(sentences_dataset, batch_size=64, collate_fn=lambda sentences_inputs: model.data_collator_sentence(sentences_inputs))
 
     # Finally, construct the encodings of the sentences
     sentences_encodings = []
@@ -413,7 +647,7 @@ if __name__ == "__main__":
     # Otherwise, predict no relation
     # Lastly, compute the tacred score
     # for threshold in np.linspace(0.2, 1, 81).tolist():
-    for threshold in selected_thresholds or np.linspace(0.2, 1, 33).tolist():
+    for threshold in np.linspace(0.2, 1, 33).tolist():
         preds_rels = np.array([rules_relations[x] for x in result.argmax(axis=0)])
         preds_rels[preds_max < threshold] = 'no_relation'
         pred = preds_rels.tolist()
@@ -458,7 +692,7 @@ if __name__ == "__main__":
 
 
     # Iterate over how many rules for each relation to consider
-    for how_many_to_average in [1, 3, 5, 7, 11, 23, 100, 100_000]:
+    for how_many_to_average in [1, 3, 5]:
         # how_many_to_average=1
         all_sents_text = []
         all_preds = []
@@ -469,10 +703,10 @@ if __name__ == "__main__":
             # all_preds.append((logit_scale*spp.softmax([x[1] for x in pred_for_col])).tolist())
             all_preds.append([x[1] for x in pred_for_col])
             all_rels.append([x[0] for x in pred_for_col])
-        final_result = compute_results_with_thresholds(gold, all_preds, all_rels, selected_thresholds or np.linspace(0.2, 1, 81).tolist(), verbose=False, overwrite_results=default_predictions_path)
+        final_result = compute_results_with_thresholds(gold, all_preds, all_rels, np.linspace(0.2, 1, 81).tolist(), verbose=False, overwrite_results=default_predictions_path)
         best = max(final_result, key=lambda x: x['f1_tacred'])
         print({'how_many_to_average': how_many_to_average, **best})
-        print(compute_results_with_thresholds(gold, all_preds, all_rels, [best['threshold']], verbose=False, overwrite_results=default_predictions_path))
+        print(compute_results_with_thresholds(gold, all_preds, all_rels, [best['threshold']], verbose=True, overwrite_results=default_predictions_path))
 
     # for (a,b) in [(i, ast) for i, (ast, ap, ar, g) in enumerate(zip(all_sents_text, all_preds, all_rels, gold)) if g == 'per:parents'][:10]:
     #     print('-'*20)
