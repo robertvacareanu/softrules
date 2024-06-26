@@ -109,7 +109,7 @@ def do_v2(episode_paths, episode_paths_output, rules_path, rules_path_outputs):
             json.dump([episodes_done, outputs, rels], fout)
     
 
-
+# python -m src.isolated_experiments.9_subj_obj_aware_data.main
 if __name__ == "__main__":
     # episode_paths        = ["/storage/rvacareanu/data/softrules/fsre_dataset/NYT29/test_episodes/5_way_1_shots_10K_episodes_3q_seed_160290.json"]
     # episode_paths_output = ["/storage/rvacareanu/data/softrules/fsre_dataset/NYT29/test_episodes/5_way_1_shots_10K_episodes_3q_seed_160290_with_subjobj_v1.json"]
@@ -117,8 +117,36 @@ if __name__ == "__main__":
     # rules_path_outputs   = ["/storage/rvacareanu/data/softrules/rules/fsre_dataset/NYT29/enhanced_syntax_with_lexicalized.jsonl", "/storage/rvacareanu/data/softrules/rules/fsre_dataset/NYT29/surface_with_lexicalized.jsonl"]
     # rules_path           = ["/storage/rvacareanu/data/softrules/rules/fsre_dataset/TACRED/enhanced_syntax.jsonl", "/storage/rvacareanu/data/softrules/rules/fsre_dataset/TACRED/surface.jsonl"]
     # rules_path_outputs   = ["/storage/rvacareanu/data/softrules/rules/fsre_dataset/TACRED/enhanced_syntax_with_lexicalized.jsonl", "/storage/rvacareanu/data/softrules/rules/fsre_dataset/TACRED/surface_with_lexicalized.jsonl"]
-    rules_path           = ["/storage/rvacareanu/data/softrules/rules/fsre_dataset/WIKIDATA/enhanced_syntax.jsonl", "/storage/rvacareanu/data/softrules/rules/fsre_dataset/WIKIDATA/surface.jsonl"]
-    rules_path_outputs   = ["/storage/rvacareanu/data/softrules/rules/fsre_dataset/WIKIDATA/enhanced_syntax_with_lexicalized.jsonl", "/storage/rvacareanu/data/softrules/rules/fsre_dataset/WIKIDATA/surface_with_lexicalized.jsonl"]
+    # rules_path           = ["/storage/rvacareanu/data/softrules/rules/fsre_dataset/TACRED_full_trainonly/enhanced_syntax.jsonl", "/storage/rvacareanu/data/softrules/rules/fsre_dataset/TACRED_full_trainonly/surface.jsonl"]
+    # rules_path_outputs   = ["/storage/rvacareanu/data/softrules/rules/fsre_dataset/TACRED_full_trainonly/enhanced_syntax_with_lexicalized_partial.jsonl", "/storage/rvacareanu/data/softrules/rules/fsre_dataset/TACRED_full_trainonly/surface_with_lexicalized_partial.jsonl"]
+
+    # rules_path           = ["/storage/rvacareanu/data/softrules/rules/fsre_dataset/WIKIDATA/enhanced_syntax.jsonl", "/storage/rvacareanu/data/softrules/rules/fsre_dataset/WIKIDATA/surface.jsonl"]
+    # rules_path_outputs   = ["/storage/rvacareanu/data/softrules/rules/fsre_dataset/WIKIDATA/enhanced_syntax_with_lexicalized.jsonl", "/storage/rvacareanu/data/softrules/rules/fsre_dataset/WIKIDATA/surface_with_lexicalized.jsonl"]
+    # rules_path           = ["/storage/rvacareanu/data/softrules/rules/fsre_dataset/TACRED/surface_words_only.jsonl"]
+    # rules_path_outputs   = ["/storage/rvacareanu/data/softrules/rules/fsre_dataset/TACRED/surface_words_only_with_lexicalized_partial.jsonl"]
+    # rules_path           = [
+    #     "/storage/rvacareanu/data/softrules/rules/fsre_dataset_smallscale_exp/TACRED/surface.jsonl",
+    #     "/storage/rvacareanu/data/softrules/rules/fsre_dataset_smallscale_exp/TACRED/enhanced_syntax.jsonl",
+    #     "/storage/rvacareanu/data/softrules/rules/fsre_dataset_smallscale_exp/NYT29/surface.jsonl",
+    #     "/storage/rvacareanu/data/softrules/rules/fsre_dataset_smallscale_exp/NYT29/enhanced_syntax.jsonl",
+    #     "/storage/rvacareanu/data/softrules/rules/fsre_dataset_smallscale_exp/WIKIDATA/surface.jsonl",
+    #     "/storage/rvacareanu/data/softrules/rules/fsre_dataset_smallscale_exp/WIKIDATA/enhanced_syntax.jsonl",
+    # ]
+    # rules_path_outputs   = [
+    #     "/storage/rvacareanu/data/softrules/rules/fsre_dataset_smallscale_exp/TACRED/surface_with_lexicalized_partial.jsonl",
+    #     "/storage/rvacareanu/data/softrules/rules/fsre_dataset_smallscale_exp/TACRED/enhanced_syntax_with_lexicalized_partial.jsonl",
+    #     "/storage/rvacareanu/data/softrules/rules/fsre_dataset_smallscale_exp/NYT29/surface_with_lexicalized_partial.jsonl",
+    #     "/storage/rvacareanu/data/softrules/rules/fsre_dataset_smallscale_exp/NYT29/enhanced_syntax_with_lexicalized_partial.jsonl",
+    #     "/storage/rvacareanu/data/softrules/rules/fsre_dataset_smallscale_exp/WIKIDATA/surface_with_lexicalized_partial.jsonl",
+    #     "/storage/rvacareanu/data/softrules/rules/fsre_dataset_smallscale_exp/WIKIDATA/enhanced_syntax_with_lexicalized_partial.jsonl",
+
+    # ]
+    # rules_path           = ["/storage/rvacareanu/data/softrules/rules/fsre_dataset/WIKIDATA/surface_words_only.jsonl"]
+    # rules_path_outputs   = ["/storage/rvacareanu/data/softrules/rules/fsre_dataset/WIKIDATA/surface_words_only_with_lexicalized_partial.jsonl"]
+    rules_path           = ["/storage/rvacareanu/data/softrules/rules/fsre_dataset/NYT29/surface_words_only.jsonl"]
+    rules_path_outputs   = ["/storage/rvacareanu/data/softrules/rules/fsre_dataset/NYT29/surface_words_only_with_lexicalized_partial.jsonl"]
+
+    
     # do_v1(episode_paths, episode_paths_output, rules_path, rules_path_outputs)
 
 
@@ -133,9 +161,12 @@ if __name__ == "__main__":
             with open(rp_in) as fin:
                 for line in fin:
                     loaded_line = json.loads(line)
+                    # _=fout.write(json.dumps(loaded_line))
+                    # _=fout.write("\n")
                     r_fe = ' '.join(loaded_line['sentence_tokenized'][loaded_line['first_entity_start']:loaded_line['first_entity_end']]) # NOTE: no more `+1` here as we already add one when we created the rule file
                     r_se = ' '.join(loaded_line['sentence_tokenized'][loaded_line['second_entity_start']:loaded_line['second_entity_end']]) # NOTE: no more `+1` here as we already add one when we created the rule file
-                    loaded_line['query'] = replace_entity_types_with_lexicalized_entity(rule=loaded_line['query'], first_entity=loaded_line['first_entity_type'], second_entity=loaded_line['second_entity_type'], first_entity_lexicalized=r_fe, second_entity_lexicalzied=r_se)
+                    if loaded_line['first_entity_type'] == loaded_line['second_entity_type']:
+                        loaded_line['query'] = replace_entity_types_with_lexicalized_entity(rule=loaded_line['query'], first_entity=loaded_line['first_entity_type'], second_entity=loaded_line['second_entity_type'], first_entity_lexicalized=r_fe, second_entity_lexicalzied=r_se)
                     _=fout.write(json.dumps(loaded_line))
                     _=fout.write("\n")
 

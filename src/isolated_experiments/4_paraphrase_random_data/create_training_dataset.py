@@ -43,14 +43,15 @@ def do_train():
     # exit()
     dataset = [] #defaultdict(list)
     for (start, end) in [
+        # (0,       1000 ),
         (0,       10000 ), (10000,   20000 ),  (20000,   30000 ), (30000,  40000 ), (40000,   50000 ), (50000,   60000 ), (60000,   70000 ), (70000,   80000 ), (80000,   90000 ), (90000,  100000 ),
         (100000, 110000 ), (110000, 120000 ), (120000, 130000 ), (130000, 140000 ), (140000, 150000 ), (150000, 160000 ), (160000, 170000 ), (170000, 180000 ), (180000, 190000 ), (190000, 200000 ),
-        (200000, 210000 ), (210000, 220000 ), (220000, 230000 ), (230000, 240000 ), (240000, 250000 ), (250000, 260000 ), (260000, 270000 ), (270000, 280000 ), (280000, 290000 ), (290000, 300000 ),
-        (300000, 310000 ), (310000, 320000 ), (320000, 330000 ), (330000, 340000 ), (340000, 350000 ), (350000, 360000 ), (360000, 370000 ), (370000, 380000 ), (380000, 390000 ), (390000, 400000 ),
-        (400000, 410000 ), (410000, 420000 ), (420000, 430000 ), (430000, 440000 ), (440000, 450000 ), (450000, 460000 ), (460000, 470000 ), (470000, 480000 ), (480000, 490000 ), (490000, 500000 ),
+        (200000, 210000 ), (210000, 220000 ), (220000, 230000 ), (230000, 240000 ), (240000, 250000 ),# (250000, 260000 ), (260000, 270000 ), (270000, 280000 ), (280000, 290000 ), (290000, 300000 ),
+        # (300000, 310000 ), (310000, 320000 ), (320000, 330000 ), (330000, 340000 ), (340000, 350000 ), (350000, 360000 ), (360000, 370000 ), (370000, 380000 ), (380000, 390000 ), (390000, 400000 ),
+        # (400000, 410000 ), (410000, 420000 ), (420000, 430000 ), (430000, 440000 ), (440000, 450000 ), (450000, 460000 ), (460000, 470000 ), (470000, 480000 ), (480000, 490000 ), (490000, 500000 ),
     ]:
 
-        with open(f'src/isolated_experiments/4_paraphrase_random_data/data/231125/merged_dataset//merged_1M_{start}_{end}.pickle', 'rb') as fin:
+        with open(f'src/isolated_experiments/4_paraphrase_random_data/data/231202/merged_1M_{start}_{end}.pickle', 'rb') as fin:
             data, work_data, result = pickle.load(fin)
         for idx, (example, paraphrases) in tqdm.tqdm(enumerate(zip(data, result))):
             # Parse result
@@ -172,7 +173,7 @@ if __name__ == "__main__":
     dataset = do_train()
     # episode_like_test()
 
-    with open('src/isolated_experiments/4_paraphrase_random_data/data/231125/merged_dataset/enhanced_syntax_paraphrase_0_500k.jsonl', 'w+') as fout:
+    with open('src/isolated_experiments/4_paraphrase_random_data/data/231202/merged_dataset/enhanced_syntax_paraphrase_0_250k.jsonl', 'w+') as fout:
         for line in dataset:
             if ']+  [' in line['query_es']:
                 print("It is")
@@ -180,7 +181,7 @@ if __name__ == "__main__":
             _=fout.write(json.dumps(result_line))
             _=fout.write('\n')
 
-    with open('src/isolated_experiments/4_paraphrase_random_data/data/231125/merged_dataset/surface_paraphrase_0_500k.jsonl', 'w+') as fout:
+    with open('src/isolated_experiments/4_paraphrase_random_data/data/231202/merged_dataset/surface_paraphrase_0_250k.jsonl', 'w+') as fout:
         for line in dataset:
             result_line = {**line, 'query': line['query_s'].replace(']+  [', ']+ [')}
             _=fout.write(json.dumps(result_line))
