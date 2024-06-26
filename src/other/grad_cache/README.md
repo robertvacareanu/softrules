@@ -1,1 +1,0 @@
-The code in this folder (i.e. `grad_cache`) is from https://github.com/luyug/GradCache and adapted for our usecase
