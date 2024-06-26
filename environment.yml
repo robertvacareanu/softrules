@@ -125,12 +125,14 @@ dependencies:
       - multiprocess==0.70.15
       - packaging==23.2
       - pandas==2.1.2
+      - protobuf==4.25.1
       - pyarrow==14.0.1
       - python-dateutil==2.8.2
       - pytorch-lightning==2.1.1
       - pytz==2023.3.post1
       - regex==2023.10.3
       - safetensors==0.4.0
+      - sentencepiece==0.1.99
       - six==1.16.0
       - tokenizers==0.14.1
       - torchmetrics==1.2.0
@@ -139,3 +141,4 @@ dependencies:
       - tzdata==2023.3
       - xxhash==3.4.1
       - yarl==1.9.2
+prefix: /storage/rvacareanu/apps/miniconda3/envs/softrules_2311
