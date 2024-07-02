@@ -8,7 +8,7 @@ import json
 from src.utils import line_to_hash
 from src.baseline.entity_marker_cross_encoder import preprocess_line
 from collections import defaultdict, Counter
-from src.softrules.different_encoder.model_cliplike_multidata import read_rules
+from src.softrules.different_encoder.model_cliplike import read_rules
 
 
 if __name__ == "__main__":
